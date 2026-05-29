@@ -14,7 +14,7 @@ interface SEOOptions {
 }
 
 const BASE_TITLE = "Nautiplex";
-const DEFAULT_OG_IMAGE = "https://nautiq.gr/og-image.png";
+const DEFAULT_OG_IMAGE = "https://nautiplex.gr/og-image.png";
 
 const setMeta = (name: string, content: string, isProperty = false) => {
   const attr = isProperty ? "property" : "name";
@@ -94,3 +94,4 @@ export const useSEO = ({
     };
   }, [title, description, canonical, ogImage, ogType, keywords, noIndex, locale, twitterCard, hashtags]);
 };
+

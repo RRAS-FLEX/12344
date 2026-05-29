@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+﻿import { supabase } from "@/lib/supabase";
 import { resolveStorageImage } from "@/lib/storage-public";
 
 const placeholderDestinationImage = "/placeholder.svg";
@@ -13,7 +13,7 @@ export interface Destination {
   bestFor: string;
 }
 
-const DESTINATIONS_CACHE_KEY = "nautiq:destinations-cache:v2";
+const DESTINATIONS_CACHE_KEY = "nautiplex:destinations-cache:v2";
 const DESTINATIONS_CACHE_TTL_MS = 10 * 60 * 1000;
 const DESTINATIONS_CACHE_MAX_STALE_MS = 24 * 60 * 60 * 1000;
 
@@ -77,38 +77,43 @@ const fallbackDestinations: Destination[] = [
     slug: "thassos",
     name: "Thassos",
     image: resolveStorageImage("thassos/cover.jpg", "destination-images", placeholderDestinationImage),
-    boats: 24,
+    boats: 0,
     description: "Crystal-clear bays, pine-lined coast, and relaxed island pacing.",
-    bestFor: "Families & first-time boat trips",
+    bestFor: "",
   },
   {
     id: "halkidiki",
     slug: "halkidiki",
     name: "Halkidiki",
     image: resolveStorageImage("halkidiki/cover.jpg", "destination-images", placeholderDestinationImage),
-    boats: 18,
+    boats: 0,
     description: "Long beaches and scenic peninsulas with calm summer waters.",
-    bestFor: "Day cruises & snorkeling",
+    bestFor: "",
   },
   {
     id: "mykonos",
     slug: "mykonos",
     name: "Mykonos",
     image: resolveStorageImage("mykonos/cover.jpg", "destination-images", placeholderDestinationImage),
-    boats: 32,
+    boats: 0,
     description: "Vibrant beach culture and iconic sunset routes to nearby islands.",
-    bestFor: "Groups & premium experiences",
+    bestFor: "",
   },
   {
     id: "santorini",
     slug: "santorini",
     name: "Santorini",
     image: resolveStorageImage("santorini/cover.jpg", "destination-images", placeholderDestinationImage),
-    boats: 28,
+    boats: 0,
     description: "Volcanic cliffs, dramatic caldera views, and signature sunset sailings.",
-    bestFor: "Couples & luxury charters",
+    bestFor: "",
   },
 ];
+
+const normalizeLocation = (value: string) =>
+  String(value ?? "")
+    .toLowerCase()
+    .trim();
 
 export const getDestinations = async (): Promise<Destination[]> => {
   if (destinationsInMemory && isFresh(destinationsInMemory.updatedAt, DESTINATIONS_CACHE_TTL_MS)) {
@@ -126,13 +131,28 @@ export const getDestinations = async (): Promise<Destination[]> => {
   }
 
   const fetchOnce = async (): Promise<Destination[]> => {
-    const { data, error } = await (supabase as any)
+    const [{ data, error }, { data: boatRows }] = await Promise.all([
+      (supabase as any)
       .from("destinations")
-      .select("id, slug, name, images, boats, description, best_for");
+      .select("id, slug, name, images, boats, description, best_for"),
+      (supabase as any)
+        .from("boats")
+        .select("location, status"),
+    ]);
 
     if (error || !Array.isArray(data) || data.length === 0) {
       throw new Error(error?.message || "No destinations returned");
     }
+
+    const activeBoatLocations = Array.isArray(boatRows)
+      ? boatRows
+          .filter((row: { status?: string | null }) => {
+            const status = String(row?.status ?? "").trim().toLowerCase();
+            return !["inactive", "maintenance", "archived", "draft"].includes(status);
+          })
+          .map((row: { location?: string | null }) => normalizeLocation(String(row?.location ?? "")))
+          .filter(Boolean)
+      : [];
 
     return [...data]
       .sort((a: any, b: any) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")))
@@ -143,14 +163,24 @@ export const getDestinations = async (): Promise<Destination[]> => {
         ? `${rawImages}/1.jpg`
         : rawImages;
 
+      const destinationName = String(destination.name ?? "");
+      const normalizedDestinationName = normalizeLocation(destinationName);
+      const computedBoatCount = normalizedDestinationName
+        ? activeBoatLocations.reduce((total, location) => {
+            return location.includes(normalizedDestinationName) || normalizedDestinationName.includes(location)
+              ? total + 1
+              : total;
+          }, 0)
+        : 0;
+
       return {
         id: destination.id,
         slug: destination.slug ?? String(destination.name ?? "destination").toLowerCase(),
-        name: destination.name,
+        name: destinationName,
         image: resolveStorageImage(resolvedImagePath, "destination-images", fallbackImage),
-        boats: Number(destination.boats ?? 0),
+        boats: computedBoatCount,
         description: destination.description ?? "",
-        bestFor: destination.best_for ?? "Flexible day trips",
+        bestFor: destination.best_for ?? "",
       };
     });
   };
@@ -179,3 +209,4 @@ export const getDestinations = async (): Promise<Destination[]> => {
 
   return destinationsInFlight;
 };
+

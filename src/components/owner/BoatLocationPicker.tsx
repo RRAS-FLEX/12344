@@ -26,8 +26,8 @@ const LeafletMarker = Marker as any;
 
 const createMarkerIcon = () =>
   L.divIcon({
-    className: "nautiq-map-marker-wrapper",
-    html: '<span class="nautiq-map-marker is-active"></span>',
+    className: "nautiplex-map-marker-wrapper",
+    html: '<span class="nautiplex-map-marker is-active"></span>',
     iconSize: [24, 24],
     iconAnchor: [12, 12],
   });
@@ -389,3 +389,4 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
 
 export type { BoatLocationPickerValue };
 export default BoatLocationPicker;
+

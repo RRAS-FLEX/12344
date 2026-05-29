@@ -55,7 +55,7 @@ export const handler = async (event) => {
 
         const { data: booking } = await supabaseAdmin
           .from("bookings")
-          .select("id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout")
+          .select("id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_event_date, party_event_time, party_tier_selected, party_tier_price")
           .eq("id", bookingId)
           .maybeSingle();
 
@@ -140,6 +140,10 @@ export const handler = async (event) => {
             owner_payout: ownerPayout,
             extras: safeExtras,
             notes: safeNotes,
+            ...(booking.party_event_date ? { party_event_date: booking.party_event_date } : {}),
+            ...(booking.party_event_time ? { party_event_time: booking.party_event_time } : {}),
+            ...(booking.party_tier_selected ? { party_tier_selected: booking.party_tier_selected } : {}),
+            ...(booking.party_tier_price ? { party_tier_price: booking.party_tier_price } : {}),
           };
 
           const normalizedEmail = (customerEmail || stripeEmail || "").trim().toLowerCase();
@@ -164,7 +168,7 @@ export const handler = async (event) => {
                   `Hi ${finalCustomerName},`,
                   "",
                   `Here are your booking details for ${boatName || booking.boat_name || "your trip"}.`,
-                  `Package: ${booking.package_label || "Nautiq experience"}`,
+                  `Package: ${booking.package_label || "Nautiplex experience"}`,
                   `Date: ${booking.start_date || "-"}`,
                   `Departure time: ${booking.departure_time || "-"}`,
                   `Meeting point: ${departureMarina || booking.departure_marina || "-"}`,
@@ -175,13 +179,13 @@ export const handler = async (event) => {
                   `Paid now (${paymentPlan === "deposit" ? "30% deposit" : "full"}): €${amountDueNow}`,
                 ];
                 if (receiptUrl) lines.push("", `Stripe receipt: ${receiptUrl}`);
-                lines.push("", `Host: ${finalOwnerName}`, "We have also notified the owner about your confirmed booking.", "", "See you on the water,", "Nautiq");
+                lines.push("", `Host: ${finalOwnerName}`, "We have also notified the owner about your confirmed booking.", "", "See you on the water,", "Nautiplex");
                 const body = lines.join("\n");
 
                 await supabaseAdmin.from("customer_emails").insert({ booking_id: booking.id, to_email: normalizedEmail, subject, preview_text: previewText, body, status: "queued" });
                 if (resendApiKey) {
                   try {
-                    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendApiKey}` }, body: JSON.stringify({ from: "Nautiq Bookings <bookings@mail.nautiq.com>", to: normalizedEmail, subject, text: body }) });
+                    await fetch("https://api.resend.com/emails", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendApiKey}` }, body: JSON.stringify({ from: "Nautiplex Bookings <bookings@mail.nautiplex.com>", to: normalizedEmail, subject, text: body }) });
                   } catch {}
                 }
               }
@@ -202,3 +206,4 @@ export const handler = async (event) => {
     return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: err instanceof Error ? err.message : "Unexpected error" }) };
   }
 };
+

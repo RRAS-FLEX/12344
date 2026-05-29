@@ -1,6 +1,7 @@
 // Supabase Edge Function: bookings-resend-email
 // Resends a customer booking email using data from Supabase and Stripe receipt.
 
+// @ts-nocheck
 import Stripe from "https://esm.sh/stripe@16.0.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0?target=deno";
 
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
       `Hi ${booking.customer_name || "there"},`,
       "",
       `Here are your booking details for ${booking.boat_name || "your trip"}.`,
-      `Package: ${booking.package_label || "Nautiq experience"}`,
+      `Package: ${booking.package_label || "Nautiplex experience"}`,
       `Date: ${booking.start_date || "-"}`,
       `Departure time: ${booking.departure_time || "-"}`,
       `Meeting point: ${booking.departure_marina || "-"}`,
@@ -139,7 +140,7 @@ Deno.serve(async (req) => {
       "We have also notified the owner about your confirmed booking.",
       "",
       "See you on the water,",
-      "Nautiq",
+      "Nautiplex",
     );
 
     const emailBody = lines.join("\n");
@@ -172,7 +173,7 @@ Deno.serve(async (req) => {
           Authorization: `Bearer ${resendApiKey}`,
         },
         body: JSON.stringify({
-          from: "Nautiq Bookings <bookings@mail.nautiq.com>",
+          from: "Nautiplex Bookings <bookings@mail.nautiplex.com>",
           to: normalizedEmail,
           subject,
           text: emailBody,
@@ -194,3 +195,4 @@ Deno.serve(async (req) => {
     );
   }
 });
+

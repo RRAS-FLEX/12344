@@ -21,7 +21,7 @@ export default function CookiePolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">1. What Are Cookies?</h2>
             <p className="text-gray-700 leading-relaxed">
-              Cookies are small pieces of data stored on your device that help us remember information about you and enhance your browsing experience. Nautiq uses cookies and similar tracking technologies to provide, maintain, protect and improve our services.
+              Cookies are small pieces of data stored on your device that help us remember information about you and enhance your browsing experience. Nautiplex uses cookies and similar tracking technologies to provide, maintain, protect and improve our services.
             </p>
           </section>
 
@@ -52,7 +52,7 @@ export default function CookiePolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">3. Local Storage Usage</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq uses browser Local Storage to store information on your device, including:
+              Nautiplex uses browser Local Storage to store information on your device, including:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Authentication tokens and user session data</li>
@@ -69,7 +69,7 @@ export default function CookiePolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">4. Third-Party Cookies</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq may use third-party services for analytics, payments (Stripe), and customer support. These services may place their own cookies on your device. We recommend reviewing their privacy policies:
+              Nautiplex may use third-party services for analytics, payments (Stripe), and customer support. These services may place their own cookies on your device. We recommend reviewing their privacy policies:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Stripe: stripe.com/privacy</li>
@@ -105,7 +105,7 @@ export default function CookiePolicy() {
               If you have questions about this Cookie Policy, please contact us at:
             </p>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-gray-700">Email: privacy@nautiq.com</p>
+              <p className="text-gray-700">Email: privacy@nautiplex.com</p>
             </div>
           </section>
         </div>
@@ -113,3 +113,4 @@ export default function CookiePolicy() {
     </div>
   );
 }
+

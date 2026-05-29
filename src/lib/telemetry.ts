@@ -1,4 +1,4 @@
-export interface ClientTelemetryEvent {
+﻿export interface ClientTelemetryEvent {
   id: string;
   type: "render-error" | "fetch-error" | "runtime-warning";
   message: string;
@@ -8,7 +8,7 @@ export interface ClientTelemetryEvent {
   pathname: string;
 }
 
-const TELEMETRY_KEY = "nautiq:client-telemetry:v1";
+const TELEMETRY_KEY = "nautiplex:client-telemetry:v1";
 const MAX_EVENTS = 150;
 
 const isBrowser = typeof window !== "undefined";
@@ -71,3 +71,4 @@ export const clearClientTelemetry = () => {
   if (!isBrowser) return;
   window.localStorage.removeItem(TELEMETRY_KEY);
 };
+

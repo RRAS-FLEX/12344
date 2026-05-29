@@ -1,4 +1,4 @@
--- Nautiq trust hardening: overlap prevention, idempotency, and booking audit trail
+﻿-- Nautiplex trust hardening: overlap prevention, idempotency, and booking audit trail
 
 begin;
 
@@ -143,3 +143,4 @@ before insert or update on public.bookings
 for each row execute function public.prevent_overlapping_bookings();
 
 commit;
+

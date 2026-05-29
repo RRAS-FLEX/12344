@@ -1,4 +1,4 @@
--- Recommended least-privilege RLS policies for Nautiq
+﻿-- Recommended least-privilege RLS policies for Nautiplex
 -- Safe to run multiple times (drops/recreates only named policies below)
 
 begin;
@@ -294,3 +294,4 @@ begin
 end $$;
 
 commit;
+

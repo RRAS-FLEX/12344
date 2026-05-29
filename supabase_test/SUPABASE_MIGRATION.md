@@ -1,4 +1,4 @@
-# Supabase Migration Guide - Nautiq
+# Supabase Migration Guide - Nautiplex
 
 This document explains what's been done to add Supabase support and how to activate it.
 
@@ -314,3 +314,4 @@ If something breaks:
 **Fallback**: Always works with localStorage if Supabase is not set up
 
 **Next**: Follow SUPABASE_SETUP.md to create your project and activate Supabase!
+

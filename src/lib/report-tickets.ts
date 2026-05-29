@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+﻿import { supabase } from "./supabase";
 
 export type ReportType = "customer" | "owner" | "boat" | "website";
 export type ReportSeverity = "low" | "medium" | "high" | "critical";
@@ -33,7 +33,7 @@ export interface NewReportTicket {
   metadata?: Record<string, unknown>;
 }
 
-const REPORT_STORAGE_KEY = "nautiq:report-tickets";
+const REPORT_STORAGE_KEY = "nautiplex:report-tickets";
 
 const mapReportTicket = (ticket: any): ReportTicket => ({
   id: String(ticket.id),

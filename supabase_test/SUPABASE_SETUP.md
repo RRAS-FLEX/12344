@@ -1,6 +1,6 @@
 # Supabase Integration Setup
 
-This guide explains how to set up Supabase for Nautiq.
+This guide explains how to set up Supabase for Nautiplex.
 
 ## 1. Create a Supabase Project
 
@@ -242,3 +242,4 @@ Run `npm run dev` and check the browser console for any connection errors.
 - Set up real-time subscriptions for live updates
 
 For more info, see [Supabase docs](https://supabase.com/docs).
+

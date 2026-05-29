@@ -202,7 +202,7 @@ const BecomeOwner = () => {
               {tl("Owner onboarding", "Εγγραφή ιδιοκτήτη")}
             </p>
             <h1 className="mt-2 text-4xl font-heading font-bold text-foreground">
-              {tl("Apply to list boats on Nautiq", "Αίτηση για καταχώριση σκαφών στο Nautiq")}
+              {tl("Apply to list boats on Nautiplex", "Αίτηση για καταχώριση σκαφών στο Nautiplex")}
             </h1>
             <p className="mt-3 text-muted-foreground max-w-xl">
               {tl("Tell us about yourself and your fleet. Our team reviews every application before granting access to the owner dashboard and listing tools.", "Πες μας λίγα λόγια για εσένα και τον στόλο σου. Η ομάδα μας ελέγχει κάθε αίτηση πριν δοθεί πρόσβαση στο dashboard ιδιοκτήτη και στα εργαλεία καταχώρισης.")}
@@ -562,7 +562,7 @@ const BecomeOwner = () => {
                         >
                           Boat Owner Agreement
                         </Link>{" "}
-                        and understand that Nautiq takes a 15% platform commission from bookings.
+                        and understand that Nautiplex takes a 15% platform commission from bookings.
                       </Label>
                     </div>
 

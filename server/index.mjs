@@ -114,6 +114,20 @@ const addHoursWithoutOvernightWrap = (timeValue, hoursToAdd) => {
   return `${endHour}:${endMinute}`;
 };
 
+const addHoursAllowWrap = (timeValue, hoursToAdd) => {
+  if (!isValidTime(timeValue) || !Number.isFinite(hoursToAdd) || hoursToAdd <= 0) {
+    return null;
+  }
+
+  const [hoursPart, minutesPart] = String(timeValue).split(":");
+  const startMinutes = Number(hoursPart) * 60 + Number(minutesPart);
+  const endMinutes = startMinutes + Math.round(hoursToAdd * 60);
+  const normalized = ((endMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const endHour = String(Math.floor(normalized / 60)).padStart(2, "0");
+  const endMinute = String(normalized % 60).padStart(2, "0");
+  return `${endHour}:${endMinute}`;
+};
+
 const isSlotAvailableForRange = (occupiedSlots, departureTime, packageHours) => {
   const desiredEndTime = addHoursWithoutOvernightWrap(departureTime, packageHours);
   if (!desiredEndTime) return false;
@@ -460,6 +474,42 @@ const requireOwnerRole = async (req, res, next) => {
   return next();
 };
 
+const normalizeEmail = (value) => String(value ?? "").trim().toLowerCase();
+
+const requireBookingOwnerAccess = async (req, res, next) => {
+  const user = req.supabaseUser;
+  if (!user) {
+    return res.status(500).json({ error: "Supabase user context is missing" });
+  }
+
+  const bookingId = String(req.body?.bookingId ?? req.query?.bookingId ?? "").trim();
+  if (!bookingId) {
+    return res.status(400).json({ error: "Missing bookingId" });
+  }
+
+  const { data: booking, error } = await supabaseAdmin
+    .from("bookings")
+    .select("id, customer_id, customer_email")
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  if (error || !booking) {
+    return res.status(404).json({ error: "Booking not found" });
+  }
+
+  const userEmail = normalizeEmail(user.email);
+  const bookingEmail = normalizeEmail(booking.customer_email);
+  const ownsById = Boolean(booking.customer_id && booking.customer_id === user.id);
+  const ownsByEmail = Boolean(userEmail && bookingEmail && userEmail === bookingEmail);
+
+  if (!ownsById && !ownsByEmail) {
+    return res.status(403).json({ error: "You are not allowed to access this booking." });
+  }
+
+  req.bookingRow = booking;
+  return next();
+};
+
 const app = express();
 const port = Number(process.env.API_PORT ?? 4242);
 
@@ -499,7 +549,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
       const { data: booking, error: bookingLoadError } = await supabaseAdmin
         .from("bookings")
         .select(
-          "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout",
+           "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_event_date, party_event_time, party_tier_selected, party_tier_price, party_ticket_code, party_ticket_count, party_ticket_status",
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -1161,6 +1211,12 @@ const createCheckoutSchema = z.object({
   depositAmount: z.number().min(0).optional(),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
+  // Party booking fields
+  isPartyBooking: z.boolean().optional(),
+  partyEventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  partyEventTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+  partyTierSelected: z.string().optional(),
+  partyTierPrice: z.number().min(0).optional(),
 });
 
 app.post("/api/stripe/create-checkout", async (req, res) => {
@@ -1191,6 +1247,11 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
     paymentPlan,
     successUrl,
     cancelUrl,
+    isPartyBooking: isPartyBookingFromClient,
+    partyEventDate,
+    partyEventTime,
+    partyTierSelected,
+    partyTierPrice,
   } = parsed.data;
 
   let resolvedCustomerId = customerId ?? null;
@@ -1210,7 +1271,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
 
   const { data: boatById, error: boatByIdError } = await supabaseAdmin
     .from("boats")
-    .select("id, name, owner_id, price_per_day, departure_marina, flash_sale_enabled, party_ready")
+    .select("id, name, owner_id, price_per_day, departure_marina, flash_sale_enabled, type")
     .eq("id", boatId)
     .maybeSingle();
 
@@ -1219,7 +1280,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   if (!boat && boatName) {
     const { data: boatByName, error: boatByNameError } = await supabaseAdmin
       .from("boats")
-      .select("id, name, owner_id, price_per_day, flash_sale_enabled, party_ready")
+      .select("id, name, owner_id, price_per_day, flash_sale_enabled, type")
       .eq("name", boatName)
       .limit(1)
       .maybeSingle();
@@ -1304,7 +1365,9 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
     return res.status(400).json({ error: "Invalid departure time" });
   }
 
-  const bookingEndTime = addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
+  const bookingEndTime = Boolean(boat.party_ready)
+    ? addHoursAllowWrap(selectedDepartureTime, selectedPackageHours)
+    : addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
   if (!bookingEndTime) {
     return res.status(400).json({ error: "Choose a start time that keeps the trip within the same day and max 8 hours." });
   }
@@ -1335,6 +1398,21 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   const partyTicketCount = isPartyBooking ? resolvedGuestCount : 0;
   const partyTicketStatus = isPartyBooking ? "issued" : null;
 
+  let bookingEndDate = selectedDate;
+  if (isPartyBooking) {
+    try {
+      const startMinutes = toMinutes(selectedDepartureTime);
+      const endMinutes = toMinutes(bookingEndTime);
+      if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+        const next = new Date(`${selectedDate}T00:00:00.000Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        bookingEndDate = next.toISOString().slice(0, 10);
+      }
+    } catch {
+      bookingEndDate = selectedDate;
+    }
+  }
+
   // Server-side overlap guard: prevent starting checkout if another booking or
   // calendar event already occupies this time range on the selected date.
   const { data: bookingRowsForDay } = await supabaseAdmin
@@ -1358,7 +1436,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
 
   const occupiedSlots = occupiedFromBookings;
 
-  if (!isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
+  if (!isPartyBooking && !isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
     return res.status(409).json({ error: "Selected time slot is no longer available." });
   }
 
@@ -1442,7 +1520,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
         customer_id: resolvedCustomerId,
         customer_email: normalizedCustomerEmail ?? null,
         start_date: selectedDate,
-        end_date: selectedDate,
+        end_date: bookingEndDate,
         departure_time: selectedDepartureTime,
         start_time: selectedDepartureTime,
         end_time: selectedEndTime,
@@ -1469,6 +1547,13 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
         party_ticket_code: partyTicketCode,
         party_ticket_count: partyTicketCount,
         party_ticket_status: partyTicketStatus,
+        // Party tier selection
+        ...(isPartyBooking ? {
+          party_event_date: partyEventDate ?? null,
+          party_event_time: partyEventTime ?? null,
+          party_tier_selected: partyTierSelected ?? null,
+          party_tier_price: partyTierPrice ?? null,
+        } : {}),
       })
       .select("id")
       .single();
@@ -1653,7 +1738,7 @@ const buildCancellationNote = (existingNotes, reason, refundAmountCents, refundR
   return normalizedExisting ? `${normalizedExisting}\n${cancellationLine}` : cancellationLine;
 };
 
-app.post("/api/bookings/cancel", async (req, res) => {
+app.post("/api/bookings/cancel", requireSupabaseUser, requireBookingOwnerAccess, async (req, res) => {
   if (!hasValidSupabaseAdminConfig) {
     return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
   }
@@ -1663,11 +1748,7 @@ app.post("/api/bookings/cancel", async (req, res) => {
     return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
   }
 
-  const { bookingId, customerId, customerEmail, reason } = parsed.data;
-  if (!customerId && !customerEmail) {
-    return res.status(400).json({ error: "Provide customerId or customerEmail for authorization." });
-  }
-
+  const { bookingId, reason } = parsed.data;
   const { data: booking, error: bookingError } = await supabaseAdmin
     .from("bookings")
     .select("id, status, start_date, customer_id, customer_email, stripe_payment_intent_id, amount_due_now, total_price, notes")
@@ -1676,18 +1757,6 @@ app.post("/api/bookings/cancel", async (req, res) => {
 
   if (bookingError || !booking) {
     return res.status(404).json({ error: "Booking not found" });
-  }
-
-  if (customerId && booking.customer_id && booking.customer_id !== customerId) {
-    return res.status(403).json({ error: "You are not allowed to cancel this booking." });
-  }
-
-  if (customerEmail && booking.customer_email) {
-    const normalizedInputEmail = String(customerEmail).trim().toLowerCase();
-    const normalizedBookingEmail = String(booking.customer_email).trim().toLowerCase();
-    if (normalizedInputEmail !== normalizedBookingEmail) {
-      return res.status(403).json({ error: "You are not allowed to cancel this booking." });
-    }
   }
 
   if (booking.status === "cancelled") {
@@ -1761,7 +1830,7 @@ app.post("/api/bookings/cancel", async (req, res) => {
   });
 });
 
-app.post("/api/bookings/resend-customer-email", async (req, res) => {
+app.post("/api/bookings/resend-customer-email", requireSupabaseUser, requireBookingOwnerAccess, async (req, res) => {
   if (!hasValidSupabaseAdminConfig) {
     return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
   }
@@ -1771,7 +1840,7 @@ app.post("/api/bookings/resend-customer-email", async (req, res) => {
     return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
   }
 
-  const { bookingId, customerEmail: overrideEmail } = parsed.data;
+  const { bookingId } = parsed.data;
 
   const { data: booking, error: bookingError } = await supabaseAdmin
     .from("bookings")
@@ -1785,9 +1854,9 @@ app.post("/api/bookings/resend-customer-email", async (req, res) => {
     return res.status(404).json({ error: "Booking not found" });
   }
 
-  const normalizedEmail = (overrideEmail || booking.customer_email || "").trim().toLowerCase();
+  const normalizedEmail = String(booking.customer_email || req.supabaseUser.email || "").trim().toLowerCase();
   if (!normalizedEmail) {
-    return res.status(400).json({ error: "Booking has no customer email and none was provided." });
+    return res.status(400).json({ error: "Booking has no customer email and the signed-in account has no email." });
   }
 
   let receiptUrl = null;
@@ -1861,7 +1930,7 @@ app.post("/api/bookings/resend-customer-email", async (req, res) => {
   });
 });
 
-app.get("/api/bookings/by-stripe-session", async (req, res) => {
+app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res) => {
   if (!hasValidSupabaseAdminConfig) {
     return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
   }
@@ -1876,7 +1945,7 @@ app.get("/api/bookings/by-stripe-session", async (req, res) => {
 
   const { data: bookingBySessionId, error: bookingBySessionError } = await supabaseAdmin
     .from("bookings")
-    .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status")
+    .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status, party_event_date, party_event_time, party_tier_selected, party_tier_price")
     .eq("stripe_session_id", sessionId)
     .maybeSingle();
 
@@ -1890,7 +1959,7 @@ app.get("/api/bookings/by-stripe-session", async (req, res) => {
       if (bookingIdFromMetadata) {
         const { data: bookingById } = await supabaseAdmin
           .from("bookings")
-          .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status")
+          .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status, party_event_date, party_event_time, party_tier_selected, party_tier_price")
           .eq("id", bookingIdFromMetadata)
           .maybeSingle();
 
@@ -1922,9 +1991,20 @@ app.get("/api/bookings/by-stripe-session", async (req, res) => {
     return res.status(404).json({ error: "Booking not found for this session" });
   }
 
+  const user = req.supabaseUser;
+  const userEmail = normalizeEmail(user.email);
+  const bookingEmail = normalizeEmail(booking.customer_email);
+  const ownsById = Boolean(booking.customer_id && booking.customer_id === user.id);
+  const ownsByEmail = Boolean(userEmail && bookingEmail && userEmail === bookingEmail);
+
+  if (!ownsById && !ownsByEmail) {
+    return res.status(403).json({ error: "You are not allowed to access this booking." });
+  }
+
   const amount = Number(booking.amount_due_now ?? booking.total_price ?? 0);
   const ownerNotified = String(booking.status).toLowerCase() === "confirmed";
   const emailQueued = Boolean(booking.customer_email);
+  const isPartyBooking = Boolean(booking.party_ticket_code);
 
   return res.json({
     bookingId: booking.id,
@@ -1934,10 +2014,182 @@ app.get("/api/bookings/by-stripe-session", async (req, res) => {
     amount,
     ownerNotified,
     emailQueued,
+    bookingType: isPartyBooking ? "party" : "rental",
     partyTicketCode: booking.party_ticket_code || "",
     partyTicketCount: Number(booking.party_ticket_count ?? 0),
     partyTicketStatus: booking.party_ticket_status || "",
+    partyEventDate: booking.party_event_date || "",
+    partyEventTime: booking.party_event_time || "",
+    partyTierSelected: booking.party_tier_selected || "",
+    partyTierPrice: Number(booking.party_tier_price ?? 0),
   });
+});
+
+// Sector-aware boat fetch endpoints
+const ALLOWED_RELATED_TABLES = [
+  "boat_features",
+  "boat_documents",
+  "owner_packages",
+  "owner_package_boats",
+  "party_boats",
+  "watersports_boats",
+  "bookings",
+  "calendar_events",
+  "owner_reviews",
+];
+
+const parseTablesParam = (value) => {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
+const fetchRelatedForBoatIds = async (tableNames, boatIds) => {
+  const results = {};
+  await Promise.all(
+    tableNames.map(async (table) => {
+      const { data, error } = await supabaseAdmin.from(table).select("*").in("boat_id", boatIds);
+      if (error) throw error;
+      results[table] = data || [];
+    }),
+  );
+  return results;
+};
+
+const handleSectorRequest = async (req, res, sector) => {
+  if (!hasValidSupabaseAdminConfig) return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+
+  const boatId = String(req.query.boat_id || "").trim();
+  const ownerId = String(req.query.owner_id || "").trim();
+  const tablesParam = parseTablesParam(req.query.tables);
+
+  const tablesToFetch = tablesParam.length === 0 ? [] : tablesParam;
+  for (const t of tablesToFetch) {
+    if (!ALLOWED_RELATED_TABLES.includes(t)) {
+      return res.status(400).json({ error: `Related table not allowed: ${t}` });
+    }
+  }
+
+  try {
+    let baseRows = [];
+    if (sector === "rentals") {
+      if (boatId) {
+        const { data } = await supabaseAdmin.from("boats").select("*").eq("id", boatId).maybeSingle();
+        if (data) baseRows = [data];
+      } else if (ownerId) {
+        const { data } = await supabaseAdmin.from("boats").select("*").eq("owner_id", ownerId);
+        baseRows = data || [];
+      } else {
+        const { data } = await supabaseAdmin.from("boats").select("*").limit(100);
+        baseRows = data || [];
+      }
+    } else if (sector === "party") {
+      if (boatId) {
+        const { data } = await supabaseAdmin.from("party_boats").select("*").eq("boat_id", boatId).maybeSingle();
+        if (data) baseRows = [data];
+      } else if (ownerId) {
+        const { data } = await supabaseAdmin.from("party_boats").select("*").eq("owner_id", ownerId);
+        baseRows = data || [];
+      } else {
+        const { data } = await supabaseAdmin.from("party_boats").select("*").limit(100);
+        baseRows = data || [];
+      }
+    } else if (sector === "watersports") {
+      if (boatId) {
+        const { data } = await supabaseAdmin.from("watersports_boats").select("*").eq("boat_id", boatId).maybeSingle();
+        if (data) baseRows = [data];
+      } else if (ownerId) {
+        const { data } = await supabaseAdmin.from("watersports_boats").select("*").eq("owner_id", ownerId);
+        baseRows = data || [];
+      } else {
+        const { data } = await supabaseAdmin.from("watersports_boats").select("*").limit(100);
+        baseRows = data || [];
+      }
+    }
+
+    const boatIds = baseRows.map((r) => String(r.boat_id ?? r.id ?? "").trim()).filter(Boolean);
+
+    const related = tablesToFetch.length > 0 && boatIds.length > 0 ? await fetchRelatedForBoatIds(tablesToFetch, boatIds) : {};
+
+    return res.json({ sector, boats: baseRows, related });
+  } catch (error) {
+    console.error("sector fetch error", sector, error);
+    const message = error instanceof Error ? error.message : "Failed to fetch sector data";
+    return res.status(500).json({ error: message });
+  }
+};
+
+app.get("/api/boats/rentals", async (req, res) => handleSectorRequest(req, res, "rentals"));
+app.get("/api/boats/party", async (req, res) => handleSectorRequest(req, res, "party"));
+app.get("/api/boats/watersports", async (req, res) => handleSectorRequest(req, res, "watersports"));
+
+// Migrate a single boat into sector tables (party/watersports) and clear legacy columns
+app.post("/api/boats/migrate/:boatId", requireSupabaseUser, requireOwnerRole, async (req, res) => {
+  if (!hasValidSupabaseAdminConfig) return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+
+  const boatId = String(req.params.boatId || "").trim();
+  if (!boatId) return res.status(400).json({ error: "Missing boatId" });
+
+  try {
+    const { data: boat, error: boatError } = await supabaseAdmin.from("boats").select("*").eq("id", boatId).maybeSingle();
+    if (boatError) throw boatError;
+    if (!boat) return res.status(404).json({ error: "Boat not found" });
+
+    // Upsert into party_boats if type = 'Party Boat'
+    if (boat.type === 'Party Boat') {
+      const { error } = await supabaseAdmin.from("party_boats").upsert({
+        boat_id: boat.id,
+        owner_id: boat.owner_id,
+        name: boat.name,
+        location: boat.location,
+        description: boat.description,
+        departure_marina: boat.departure_marina,
+        capacity: boat.capacity,
+        ticket_max_people: boat.capacity,
+        ticket_price_per_person: 0,
+        party_tiers: [],
+        party_event_date: null,
+        party_event_time: null,
+        images: boat.images,
+        status: boat.status ?? "active",
+        map_query: boat.map_query ?? "",
+        flash_sale_enabled: boat.flash_sale_enabled ?? false,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "boat_id" });
+
+      if (error) throw error;
+    }
+
+    // Upsert into watersports_boats if type includes 'watersports'
+    if (String(boat.type ?? "").toLowerCase().includes("watersports")) {
+      const { error } = await supabaseAdmin.from("watersports_boats").upsert({
+        boat_id: boat.id,
+        owner_id: boat.owner_id,
+        name: boat.name,
+        location: boat.location,
+        description: boat.description,
+        departure_marina: boat.departure_marina,
+        capacity: boat.capacity,
+        price_per_day: boat.price_per_day ?? 0,
+        images: boat.images,
+        status: boat.status ?? "active",
+        map_query: boat.map_query ?? "",
+        flash_sale_enabled: boat.flash_sale_enabled ?? false,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "boat_id" });
+
+      if (error) throw error;
+    }
+
+    // Note: Don't update boats table - those columns don't exist
+    return res.json({ ok: true, migratedBoatId: boat.id });
+  } catch (error) {
+    console.error("/api/boats/migrate error", error);
+    const message = error instanceof Error ? error.message : "Failed to migrate boat";
+    return res.status(500).json({ error: message });
+  }
 });
 
 app.listen(port, () => {

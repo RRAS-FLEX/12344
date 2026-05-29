@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+﻿import { supabase } from "./supabase";
 
 export type MessageSender = "customer" | "owner";
 
@@ -68,7 +68,7 @@ const ensureCustomerProfile = async (session: { user: any }) => {
   const fallbackName =
     (typeof session.user?.user_metadata?.name === "string" && session.user.user_metadata.name.trim()) ||
     email.split("@")[0] ||
-    "Nautiq User";
+    "Nautiplex User";
 
   const { error } = await (supabase as any)
     .from("users")
@@ -348,3 +348,4 @@ export const addMessageToThread = async (
   await (supabase as any).from("chat_threads").update({ last_updated_at: data.created_at }).eq("id", thread.id);
   return mapMessage(data);
 };
+

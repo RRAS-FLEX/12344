@@ -13,7 +13,7 @@ const translations: TranslationMap = {
     "nav.destinations": "Destinations",
     "nav.about": "About",
     "nav.favorites": "Favorites",
-    "nav.signIn": "Sign In",
+    "nav.signIn": "Login",
     "nav.profile": "Profile",
     "nav.history": "History",
     "nav.becomeOwner": "Become an Owner",

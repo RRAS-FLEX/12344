@@ -22,7 +22,8 @@ type SettingsState = {
   analyticsConsent: boolean;
 };
 
-const SETTINGS_STORAGE_KEY = "nautiq:settings:v1";
+const SETTINGS_STORAGE_KEY = "nautiplex:settings:v1";
+const LEGACY_SETTINGS_STORAGE_KEY = "nautiq:settings:v1";
 
 const defaultSettings = (): SettingsState => ({
   profilePublic: true,
@@ -53,7 +54,8 @@ const Settings = () => {
     }
 
     try {
-      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+        ?? window.localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY);
       if (!raw) {
         return;
       }
@@ -63,6 +65,8 @@ const Settings = () => {
         ...defaultSettings(),
         ...parsed,
       };
+      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+      window.localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
       setSettings(merged);
       setSavedSnapshot(JSON.stringify(merged));
     } catch {
@@ -361,7 +365,7 @@ const Settings = () => {
                 <div className="rounded-xl border border-border p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-foreground">{tl("In-app booking notifications", "Ειδοποιήσεις κρατήσεων εντός εφαρμογής")}</p>
-                    <p className="text-xs text-muted-foreground">{tl("Show updates while browsing Nautiq.", "Εμφάνιση ενημερώσεων καθώς περιηγείσαι στο Nautiq.")}</p>
+                    <p className="text-xs text-muted-foreground">{tl("Show updates while browsing Nautiplex.", "Εμφάνιση ενημερώσεων καθώς περιηγείσαι στο Nautiplex.")}</p>
                   </div>
                   <Switch checked={settings.bookingInApp} onCheckedChange={(checked) => updateSetting("bookingInApp", checked)} />
                 </div>
@@ -388,7 +392,7 @@ const Settings = () => {
                 <div className="rounded-xl border border-border p-4 flex items-center justify-between">
                   <div>
                     <p className="text-sm text-foreground">{tl("Analytics consent", "Συγκατάθεση analytics")}</p>
-                    <p className="text-xs text-muted-foreground">{tl("Help improve Nautiq with anonymous usage analytics.", "Βοήθησε στη βελτίωση του Nautiq με ανώνυμα δεδομένα χρήσης.")}</p>
+                    <p className="text-xs text-muted-foreground">{tl("Help improve Nautiplex with anonymous usage analytics.", "Βοήθησε στη βελτίωση του Nautiplex με ανώνυμα δεδομένα χρήσης.")}</p>
                   </div>
                   <Switch checked={settings.analyticsConsent} onCheckedChange={(checked) => updateSetting("analyticsConsent", checked)} />
                 </div>
@@ -412,3 +416,5 @@ const Settings = () => {
 };
 
 export default Settings;
+
+

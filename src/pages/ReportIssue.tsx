@@ -182,7 +182,7 @@ const ReportIssue = () => {
       const created = await addReportTicket({
         reportType,
         subject: subject.trim(),
-        targetName: reportType === "website" ? targetName.trim() || "Nautiq webpage" : targetName.trim(),
+        targetName: reportType === "website" ? targetName.trim() || "Nautiplex webpage" : targetName.trim(),
         targetRef: targetRef.trim() || null,
         reporterName: reporterName.trim(),
         reporterEmail: reporterEmail.trim().toLowerCase(),
@@ -204,8 +204,8 @@ const ReportIssue = () => {
       toast({
         title: "Report submitted",
         description: tl(
-          "Your report is now in the Nautiq support workflow.",
-          "Η αναφορά σου μπήκε τώρα στη ροή υποστήριξης του Nautiq.",
+          "Your report is now in the Nautiplex support workflow.",
+          "Η αναφορά σου μπήκε τώρα στη ροή υποστήριξης του Nautiplex.",
         ),
       });
     } catch (error) {
@@ -411,7 +411,7 @@ const ReportIssue = () => {
                   </div>
                   <div className="rounded-xl border border-border p-3">
                     <p className="font-medium text-foreground">3. Resolution</p>
-                    <p className="mt-1">Nautiq support can follow up by email, review data, and escalate if needed.</p>
+                    <p className="mt-1">Nautiplex support can follow up by email, review data, and escalate if needed.</p>
                   </div>
                 </CardContent>
               </Card>

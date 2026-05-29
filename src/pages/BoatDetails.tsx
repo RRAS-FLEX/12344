@@ -106,7 +106,7 @@ const BoatDetails = () => {
   const [ownerBadges, setOwnerBadges] = useState<OwnerBadge[]>([]);
   const isOwnerPreview = searchParams.get("owner-preview") === "1" && Boolean(user?.isOwner);
   const publicBoatRef = boat ? boat.publicSlug || buildBoatPublicSlug(boat) : "";
-  const publicBoatUrl = boat ? `https://nautiq.gr/boats/${publicBoatRef}` : undefined;
+  const publicBoatUrl = boat ? `https://nautiplex.gr/boats/${publicBoatRef}` : undefined;
   const resolvedTicketMaxPeople = boat ? (boat.ticketMaxPeople > 0 ? boat.ticketMaxPeople : boat.capacity) : 0;
   const resolvedTicketPricePerPerson = boat
     ? (boat.ticketPricePerPerson > 0 ? boat.ticketPricePerPerson : boat.partyReady && boat.capacity > 0 ? boat.pricePerDay / boat.capacity : 0)
@@ -143,7 +143,7 @@ const BoatDetails = () => {
       description: boat.description,
       brand: {
         "@type": "Brand",
-        name: "Nautiq",
+        name: "Nautiplex",
       },
       category: `${boat.type} Boat Rental`,
       sku: boat.id,
@@ -188,11 +188,11 @@ const BoatDetails = () => {
 
   useSEO({
     title: boat
-      ? `${boat.name} — ${boat.type} in ${boat.location} | Nautiq`
-      : "Boat Details | Nautiq",
+      ? `${boat.name} — ${boat.type} in ${boat.location} | Nautiplex`
+      : "Boat Details | Nautiplex",
     description: boat
-      ? `Rent the ${boat.name}, a ${boat.type} in ${boat.location} for €${boat.pricePerDay}/day. Capacity: ${boat.capacity} guests. ${boat.description?.slice(0, 100) ?? "Verified by Nautiq."}`.trim()
-      : "View boat details, availability and book instantly on Nautiq.",
+      ? `Rent the ${boat.name}, a ${boat.type} in ${boat.location} for €${boat.pricePerDay}/day. Capacity: ${boat.capacity} guests. ${boat.description?.slice(0, 100) ?? "Verified by Nautiplex."}`.trim()
+      : "View boat details, availability and book instantly on Nautiplex.",
     canonical: publicBoatUrl,
     ogImage: boat?.image,
     ogType: "article",
@@ -662,3 +662,4 @@ const BoatDetails = () => {
 };
 
 export default BoatDetails;
+

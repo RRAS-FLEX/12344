@@ -19,6 +19,16 @@ const addHoursWithoutOvernightWrap = (timeValue, hoursToAdd) => {
   const endMinute = String(endMinutes % 60).padStart(2, "0");
   return `${endHour}:${endMinute}`;
 };
+const addHoursAllowWrap = (timeValue, hoursToAdd) => {
+  if (!isValidTime(timeValue) || !Number.isFinite(hoursToAdd) || hoursToAdd <= 0) return null;
+  const [hoursPart, minutesPart] = String(timeValue).split(":");
+  const startMinutes = Number(hoursPart) * 60 + Number(minutesPart);
+  const endMinutes = startMinutes + Math.round(hoursToAdd * 60);
+  const normalized = ((endMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const endHour = String(Math.floor(normalized / 60)).padStart(2, "0");
+  const endMinute = String(normalized % 60).padStart(2, "0");
+  return `${endHour}:${endMinute}`;
+};
 const isSlotAvailableForRange = (occupiedSlots, departureTime, packageHours) => {
   const desiredEndTime = addHoursWithoutOvernightWrap(departureTime, packageHours);
   if (!desiredEndTime) return false;
@@ -92,6 +102,11 @@ export const handler = async (event) => {
       paymentPlan,
       successUrl,
       cancelUrl,
+      isPartyBooking,
+      partyEventDate,
+      partyEventTime,
+      partyTierSelected,
+      partyTierPrice,
     } = body || {};
 
     if (!boatId || typeof boatId !== "string") {
@@ -160,7 +175,9 @@ export const handler = async (event) => {
       return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "Invalid departure time" }) };
     }
 
-    const bookingEndTime = addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
+    const bookingEndTime = Boolean(isPartyBooking)
+      ? addHoursAllowWrap(selectedDepartureTime, selectedPackageHours)
+      : addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
     if (!bookingEndTime) {
       return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "Choose a start time that keeps the trip within the same day and max 8 hours." }) };
     }
@@ -197,7 +214,7 @@ export const handler = async (event) => {
       : [];
 
     const occupiedSlots = occupiedFromBookings;
-    if (!isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
+    if (!Boolean(isPartyBooking) && !isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
       return { statusCode: 409, headers: corsHeaders, body: JSON.stringify({ error: "Selected time slot is no longer available." }) };
     }
 
@@ -236,6 +253,19 @@ export const handler = async (event) => {
     if (!bookingRow) {
       const ownerDisplayName = ownerRaw?.full_name || ownerRaw?.name || ownerRaw?.email || "Owner";
       const customerNameFromEmail = normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest";
+      const partyTicketCount = Math.max(1, Number(body.guests ?? 1) || 1);
+      // determine end date for bookings that wrap past midnight
+      let bookingEndDate = selectedDate;
+      try {
+        const startMinutes = toMinutes(selectedDepartureTime);
+        const endMinutes = toMinutes(bookingEndTime);
+        if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+          const next = new Date(`${selectedDate}T00:00:00.000Z`);
+          next.setUTCDate(next.getUTCDate() + 1);
+          bookingEndDate = next.toISOString().slice(0, 10);
+        }
+      } catch {}
+
       const { data: createdBooking, error: bookingError } = await supabaseAdmin
         .from("bookings")
         .insert({
@@ -243,18 +273,18 @@ export const handler = async (event) => {
           customer_id: customerId ?? null,
           customer_email: normalizedCustomerEmail ?? null,
           start_date: selectedDate,
-          end_date: selectedDate,
+          end_date: bookingEndDate,
           departure_time: selectedDepartureTime,
           start_time: selectedDepartureTime,
           end_time: bookingEndTime,
           package_hours: selectedPackageHours,
+          guests: partyTicketCount,
           total_price: discountedTotal,
           status: "pending",
           boat_name: boat.name,
           owner_name: ownerDisplayName,
           customer_name: customerNameFromEmail,
-          package_label: "Stripe checkout",
-          guests: 1,
+          package_label: Boolean(isPartyBooking) ? "Party tickets" : "Stripe checkout",
           departure_marina: boat.departure_marina ?? "",
           extras: [],
           notes: "",
@@ -264,6 +294,12 @@ export const handler = async (event) => {
           deposit_amount: depositAmount,
           platform_commission: platformCommission,
           owner_payout: ownerPayout,
+          ...(isPartyBooking ? {
+            party_event_date: partyEventDate ?? null,
+            party_event_time: partyEventTime ?? null,
+            party_tier_selected: partyTierSelected ?? null,
+            party_tier_price: partyTierPrice ?? null,
+          } : {}),
         })
         .select("id")
         .single();
@@ -344,6 +380,9 @@ export const handler = async (event) => {
     return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ sessionId: checkoutSession.id, checkoutUrl: checkoutSession.url, bookingId: bookingRow.id, amount: amountDueNow, commissionAmount: platformCommission, ownerStripeAccountId: ownerRaw?.stripe_account_id, payoutMode, warning, flashSaleEligible, flashSaleDiscount: 0 }) };
   } catch (error) {
     console.error("create-checkout error", error);
-    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: error instanceof Error ? error.message : "Unexpected error" }) };
+    const errorMessage = error instanceof Error ? error.message : "Unexpected error";
+    const stack = error instanceof Error ? error.stack : "";
+    console.error("Stack:", stack);
+    return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: errorMessage, details: stack }) };
   }
 };

@@ -21,7 +21,7 @@ export default function RefundPolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">1. Overview</h2>
             <p className="text-gray-700 leading-relaxed">
-              At Nautiq, we want you to be completely satisfied with your boat rental experience. This Refund Policy outlines the terms and conditions for refunds, cancellations, and modifications to your booking.
+              At Nautiplex, we want you to be completely satisfied with your boat rental experience. This Refund Policy outlines the terms and conditions for refunds, cancellations, and modifications to your booking.
             </p>
           </section>
 
@@ -79,7 +79,7 @@ export default function RefundPolicy() {
               The following fees are non-refundable:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li>Nautiq service fees (platform maintenance and support)</li>
+              <li>Nautiplex service fees (platform maintenance and support)</li>
               <li>Insurance upgrades (unless otherwise agreed by the boat owner)</li>
               <li>Third-party payment processing fees</li>
             </ul>
@@ -95,14 +95,14 @@ export default function RefundPolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">8. Disputes and Chargebacks</h2>
             <p className="text-gray-700 leading-relaxed">
-              If you initiate a chargeback with your bank or payment provider, Nautiq reserves the right to suspend your account and pursue legal action. We encourage all disputes to be resolved through our customer support team first.
+              If you initiate a chargeback with your bank or payment provider, Nautiplex reserves the right to suspend your account and pursue legal action. We encourage all disputes to be resolved through our customer support team first.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">9. Exceptional Circumstances</h2>
             <p className="text-gray-700 leading-relaxed">
-              In exceptional circumstances such as severe weather, natural disasters, or government travel restrictions, Nautiq may provide full refunds or rebooking options outside of the standard cancellation policy. Please contact customer support for assistance.
+              In exceptional circumstances such as severe weather, natural disasters, or government travel restrictions, Nautiplex may provide full refunds or rebooking options outside of the standard cancellation policy. Please contact customer support for assistance.
             </p>
           </section>
 
@@ -112,7 +112,7 @@ export default function RefundPolicy() {
               If you have questions about this Refund Policy or need to request a refund, please contact us at:
             </p>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-gray-700">Email: support@nautiq.com</p>
+              <p className="text-gray-700">Email: support@nautiplex.com</p>
             </div>
           </section>
         </div>
@@ -120,3 +120,4 @@ export default function RefundPolicy() {
     </div>
   );
 }
+

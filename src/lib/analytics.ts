@@ -1,4 +1,4 @@
-type AnalyticsEventName =
+﻿type AnalyticsEventName =
   | "page_view"
   | "search_submitted"
   | "boat_viewed"
@@ -21,8 +21,8 @@ declare global {
   }
 }
 
-const ANALYTICS_STORAGE_KEY = "nautiq_analytics_events";
-const ANONYMOUS_ID_KEY = "nautiq_anonymous_id";
+const ANALYTICS_STORAGE_KEY = "nautiplex_analytics_events";
+const ANONYMOUS_ID_KEY = "nautiplex_anonymous_id";
 
 const canUseBrowserStorage = () => typeof window !== "undefined" && typeof localStorage !== "undefined";
 
@@ -183,7 +183,7 @@ export const trackEvent = (name: AnalyticsEventName, payload: AnalyticsPayload =
 export const trackPageView = (details: { path: string; pageTitle?: string }) => {
   trackEvent("page_view", {
     path: details.path,
-    pageTitle: details.pageTitle ?? (typeof document !== "undefined" ? document.title : "Nautiq"),
+    pageTitle: details.pageTitle ?? (typeof document !== "undefined" ? document.title : "Nautiplex"),
   });
 };
 
@@ -196,7 +196,7 @@ export const getExperimentVariant = (experimentKey: string, variants: string[]) 
     return variants[0];
   }
 
-  const storageKey = `nautiq_exp_${experimentKey}`;
+  const storageKey = `nautiplex_exp_${experimentKey}`;
   const existing = localStorage.getItem(storageKey);
   if (existing && variants.includes(existing)) {
     return existing;
@@ -246,3 +246,5 @@ export const trackBookingConfirmed = (details: {
 }) => {
   trackEvent("booking_confirmed", details);
 };
+
+

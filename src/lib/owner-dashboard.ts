@@ -28,6 +28,9 @@ export interface OwnerBoat {
   externalCalendarUrl: string;
   flashSaleEnabled: boolean;
   partyReady: boolean;
+  partyEventDate?: string | null;
+  partyEventTime?: string | null;
+  partyTiers?: Array<{ name: string; price: number }>;
   unavailableDates: string[];
   minNoticeHours: number;
   capacity: number;
@@ -54,6 +57,19 @@ type OwnerBoatMutation = Omit<OwnerBoat, "id" | "documentsFolder" | "ticketMaxPe
 
 type OwnerBoatUpdateMutation = Partial<OwnerBoat> & {
   imageFile?: File | null;
+};
+
+type PartyBoatSectorRow = {
+  boat_id?: string | null;
+  ticket_max_people?: number | null;
+  ticket_price_per_person?: number | null;
+  party_event_date?: string | null;
+  party_event_time?: string | null;
+  party_tiers?: unknown;
+};
+
+type WatersportsBoatSectorRow = {
+  boat_id?: string | null;
 };
 
 export interface OwnerPackage {
@@ -138,6 +154,37 @@ const toNullableTrimmed = (value: unknown) => {
 
 const toTrimmed = (value: unknown) => String(value ?? "").trim();
 
+export const isWatersportsType = (value: unknown) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "watersports" || normalized === "watersports charter";
+};
+
+const parsePartyTiers = (value: unknown): Array<{ name: string; price: number }> => {
+  if (!value) return [];
+
+  const parsed = typeof value === "string"
+    ? (() => {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [];
+        }
+      })()
+    : value;
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((tier) => {
+      if (!tier || typeof tier !== "object") return null;
+      const name = String((tier as { name?: unknown }).name ?? "").trim();
+      const price = Number((tier as { price?: unknown }).price ?? 0);
+      if (!name || !Number.isFinite(price) || price < 0) return null;
+      return { name, price };
+    })
+    .filter((tier): tier is { name: string; price: number } => Boolean(tier));
+};
+
 const getTodayIsoDate = () => new Date().toISOString().slice(0, 10);
 
 const resolveDocumentUrl = async (filePath: string) => {
@@ -216,10 +263,16 @@ const uploadBoatDocument = async (basePath: string, document: BoatDocument) => {
   };
 };
 
-const mapOwnerBoat = (boat: any, features: string[], documents: BoatDocument[]): OwnerBoat => ({
+const mapOwnerBoat = (
+  boat: any,
+  features: string[],
+  documents: BoatDocument[],
+  partySector?: PartyBoatSectorRow,
+  watersportsSector?: WatersportsBoatSectorRow,
+): OwnerBoat => ({
   id: boat.id,
   name: boat.name,
-  type: boat.type,
+  type: watersportsSector?.boat_id ? "watersports" : boat.type,
   location: boat.location,
   description: boat.description ?? "",
   lengthMeters: Number(boat.length_meters ?? 0),
@@ -232,13 +285,16 @@ const mapOwnerBoat = (boat: any, features: string[], documents: BoatDocument[]):
   mapQuery: boat.map_query ?? "",
   externalCalendarUrl: boat.external_calendar_url ?? "",
   flashSaleEnabled: Boolean(boat.flash_sale_enabled),
-  partyReady: Boolean(boat.party_ready),
+  partyReady: Boolean(partySector?.boat_id),
+  partyEventDate: partySector?.party_event_date ?? null,
+  partyEventTime: partySector?.party_event_time ?? null,
+  partyTiers: parsePartyTiers(partySector?.party_tiers),
   unavailableDates: Array.isArray(boat.unavailable_dates) ? boat.unavailable_dates : [],
   minNoticeHours: Number(boat.min_notice_hours ?? 24),
   capacity: Number(boat.capacity ?? 0),
   pricePerDay: Number(boat.price_per_day ?? 0),
-  ticketMaxPeople: Number(boat.ticket_max_people ?? boat.capacity ?? 0),
-  ticketPricePerPerson: Number(boat.ticket_price_per_person ?? 0),
+  ticketMaxPeople: Number(partySector?.ticket_max_people ?? boat.capacity ?? 0),
+  ticketPricePerPerson: Number(partySector?.ticket_price_per_person ?? 0),
   rating: Number(boat.rating ?? 0),
   image: resolveOwnerBoatImage(boat),
   features,
@@ -255,6 +311,8 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
   const boatsTable = (supabase as any).from("boats");
   const featuresTable = (supabase as any).from("boat_features");
   const documentsTable = (supabase as any).from("boat_documents");
+  const partyBoatsTable = (supabase as any).from("party_boats");
+  const watersportsBoatsTable = (supabase as any).from("watersports_boats");
 
   const { data: boats, error } = await boatsTable
     .select("*")
@@ -266,6 +324,37 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
   }
 
   const boatRows = Array.isArray(boats) ? boats : [];
+  const boatIds = boatRows.map((boat) => boat.id).filter(Boolean);
+
+  const [partyResult, watersportsResult] = await Promise.all([
+    boatIds.length > 0
+      ? partyBoatsTable
+          .select("boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
+          .in("boat_id", boatIds)
+      : Promise.resolve({ data: [], error: null }),
+    boatIds.length > 0
+      ? watersportsBoatsTable
+          .select("boat_id")
+          .in("boat_id", boatIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const partyByBoatId = new Map<string, PartyBoatSectorRow>();
+  if (!partyResult.error && Array.isArray(partyResult.data)) {
+    for (const row of partyResult.data as PartyBoatSectorRow[]) {
+      const key = String(row.boat_id ?? "").trim();
+      if (key) partyByBoatId.set(key, row);
+    }
+  }
+
+  const watersportsByBoatId = new Map<string, WatersportsBoatSectorRow>();
+  if (!watersportsResult.error && Array.isArray(watersportsResult.data)) {
+    for (const row of watersportsResult.data as WatersportsBoatSectorRow[]) {
+      const key = String(row.boat_id ?? "").trim();
+      if (key) watersportsByBoatId.set(key, row);
+    }
+  }
+
   return Promise.all(
     boatRows.map(async (boat) => {
       const [{ data: featureRows }, { data: documentRows }] = await Promise.all([
@@ -281,9 +370,108 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
         boat,
         Array.isArray(featureRows) ? featureRows.map((feature: any) => feature.feature) : [],
         resolvedDocuments,
+        partyByBoatId.get(boat.id),
+        watersportsByBoatId.get(boat.id),
       );
     }),
   );
+};
+
+export const syncBoatSectorRows = async (
+  boatId: string,
+  ownerId: string,
+  payload: {
+    partyReady: boolean;
+    type: string;
+    name: string;
+    location: string;
+    description: string;
+    departureMarina: string;
+    capacity: number;
+    ticketMaxPeople: number;
+    ticketPricePerPerson: number;
+    partyEventDate?: string | null;
+    partyEventTime?: string | null;
+    partyTiers?: Array<{ name: string; price: number }>;
+    image?: string;
+    status?: string;
+    mapQuery?: string;
+    flashSaleEnabled?: boolean;
+    pricePerDay?: number;
+  },
+) => {
+  const partyBoatsTable = (supabase as any).from("party_boats");
+  const watersportsBoatsTable = (supabase as any).from("watersports_boats");
+
+  if (payload.partyReady) {
+    try {
+      console.debug("syncBoatSectorRows: upserting party_boats for", boatId, { partyEventDate: payload.partyEventDate, partyEventTime: payload.partyEventTime });
+      const { error } = await partyBoatsTable.upsert({
+      boat_id: boatId,
+      owner_id: ownerId,
+      name: payload.name,
+      location: payload.location,
+      description: payload.description,
+      departure_marina: payload.departureMarina,
+      capacity: payload.capacity,
+      ticket_max_people: payload.ticketMaxPeople,
+      ticket_price_per_person: payload.ticketPricePerPerson,
+      party_tiers: Array.isArray(payload.partyTiers) ? payload.partyTiers : null,
+      party_event_date: payload.partyEventDate ?? null,
+      party_event_time: payload.partyEventTime ?? null,
+      images: stripDataUrl(payload.image),
+      status: payload.status ?? "active",
+      map_query: payload.mapQuery ?? "",
+      flash_sale_enabled: Boolean(payload.flashSaleEnabled),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "boat_id" });
+      if (error) {
+        console.error("syncBoatSectorRows: party_boats upsert error", error);
+        throw new Error(error.message || "Failed to sync party sector row");
+      }
+      console.debug("syncBoatSectorRows: party_boats upsert OK", boatId);
+    } catch (err) {
+      console.error("syncBoatSectorRows: unexpected error during party_boats upsert", err);
+      throw err;
+    }
+  } else {
+    try {
+      console.debug("syncBoatSectorRows: deleting party_boats for", boatId);
+      const { error } = await partyBoatsTable.delete().eq("boat_id", boatId).eq("owner_id", ownerId);
+      if (error) {
+        console.error("syncBoatSectorRows: party_boats delete error", error);
+        throw new Error(error.message || "Failed to delete party sector row");
+      }
+      console.debug("syncBoatSectorRows: party_boats delete OK", boatId);
+    } catch (err) {
+      console.error("syncBoatSectorRows: unexpected error during party_boats delete", err);
+      throw err;
+    }
+  }
+
+  if (isWatersportsType(payload.type)) {
+    const { error } = await watersportsBoatsTable.upsert({
+      boat_id: boatId,
+      owner_id: ownerId,
+      name: payload.name,
+      location: payload.location,
+      description: payload.description,
+      departure_marina: payload.departureMarina,
+      capacity: payload.capacity,
+      price_per_day: Number(payload.pricePerDay ?? 0),
+      images: stripDataUrl(payload.image),
+      status: payload.status ?? "active",
+      map_query: payload.mapQuery ?? "",
+      flash_sale_enabled: Boolean(payload.flashSaleEnabled),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "boat_id" });
+
+    if (error) {
+      throw new Error(error.message || "Failed to sync watersports sector row");
+    }
+  } else {
+    await watersportsBoatsTable.delete().eq("boat_id", boatId).eq("owner_id", ownerId);
+  }
 };
 
 export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> => {
@@ -299,7 +487,7 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
       owner_id: session.user.id,
       name: boat.name,
       description: boat.description,
-      type: boat.type,
+      type: isWatersportsType(boat.type) ? "rental" : boat.type,
       location: boat.location,
       length_meters: boat.lengthMeters,
       year: boat.year,
@@ -311,14 +499,11 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
       map_query: boat.mapQuery,
       external_calendar_url: toNullableTrimmed(boat.externalCalendarUrl),
       flash_sale_enabled: Boolean(boat.flashSaleEnabled),
-      party_ready: Boolean(boat.partyReady),
       // voucher fields removed
       unavailable_dates: normalizeUnavailableDates(boat.unavailableDates),
       min_notice_hours: boat.minNoticeHours,
       capacity: boat.capacity,
       price_per_day: boat.pricePerDay,
-      ticket_max_people: boat.ticketMaxPeople,
-      ticket_price_per_person: boat.ticketPricePerPerson,
       rating: boat.rating,
       images: stripDataUrl(boat.image),
       skipper_required: boat.skipperRequired,
@@ -358,6 +543,26 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
     .eq("id", insertedBoat.id)
     .eq("owner_id", session.user.id);
 
+  await syncBoatSectorRows(insertedBoat.id, session.user.id, {
+    partyReady: Boolean(boat.partyReady),
+    type: String(boat.type ?? ""),
+    name: String(boat.name ?? ""),
+    location: String(boat.location ?? ""),
+    description: String(boat.description ?? ""),
+    departureMarina: String(boat.departureMarina ?? ""),
+    capacity: Number(boat.capacity ?? 0),
+    ticketMaxPeople: Number(boat.ticketMaxPeople ?? boat.capacity ?? 0),
+    ticketPricePerPerson: Number(boat.ticketPricePerPerson ?? 0),
+    partyEventDate: boat.partyEventDate ?? null,
+    partyEventTime: boat.partyEventTime ?? null,
+    partyTiers: Array.isArray((boat as any).partyTiers) ? (boat as any).partyTiers : [],
+    image: primaryImagePath,
+    status: boat.status,
+    mapQuery: boat.mapQuery,
+    flashSaleEnabled: Boolean(boat.flashSaleEnabled),
+    pricePerDay: Number(boat.pricePerDay ?? 0),
+  });
+
   if (safeFeatures.length > 0) {
     await featuresTable.insert(
       safeFeatures.map((feature) => ({
@@ -385,6 +590,8 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
   return {
     ...boat,
     id: insertedBoat.id,
+    ticketMaxPeople: boat.ticketMaxPeople,
+    ticketPricePerPerson: boat.ticketPricePerPerson,
     skipperRequired: boat.skipperRequired,
     documentsFolder,
     image: resolveStorageImage(normalizeBoatImagePath(primaryImagePath), "boat-images", "/placeholder.svg"),
@@ -428,7 +635,7 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   };
 
   if (updates.name !== undefined) boatUpdates.name = updates.name;
-  if (updates.type !== undefined) boatUpdates.type = updates.type;
+  if (updates.type !== undefined) boatUpdates.type = isWatersportsType(updates.type) ? "rental" : updates.type;
   if (updates.location !== undefined) boatUpdates.location = updates.location;
   if (updates.description !== undefined) boatUpdates.description = updates.description;
   if (updates.lengthMeters !== undefined) boatUpdates.length_meters = updates.lengthMeters;
@@ -441,9 +648,6 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   if (updates.mapQuery !== undefined) boatUpdates.map_query = updates.mapQuery;
   if (updates.externalCalendarUrl !== undefined) boatUpdates.external_calendar_url = toNullableTrimmed(updates.externalCalendarUrl);
   if (updates.flashSaleEnabled !== undefined) boatUpdates.flash_sale_enabled = updates.flashSaleEnabled;
-  if (updates.partyReady !== undefined) boatUpdates.party_ready = updates.partyReady;
-  if (updates.ticketMaxPeople !== undefined) boatUpdates.ticket_max_people = updates.ticketMaxPeople;
-  if (updates.ticketPricePerPerson !== undefined) boatUpdates.ticket_price_per_person = updates.ticketPricePerPerson;
   // voucher fields removed
   if (updates.unavailableDates !== undefined) {
     boatUpdates.unavailable_dates = normalizeUnavailableDates(updates.unavailableDates);
@@ -482,6 +686,43 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
       const parts = [imageUpdateError.message, details, hint, code && `code=${code}`].filter(Boolean);
       throw new Error(parts.join(" | ") || "Failed to save uploaded boat image");
     }
+  }
+
+  const partyBoatsTable = (supabase as any).from("party_boats");
+  const { data: existingPartySector } = await partyBoatsTable
+    .select("boat_id, party_tiers")
+    .eq("boat_id", boatId)
+    .eq("owner_id", session.user.id)
+    .maybeSingle();
+
+  const { data: refreshedBaseBoat } = await boatsTable
+    .select("*")
+    .eq("id", boatId)
+    .eq("owner_id", session.user.id)
+    .maybeSingle();
+
+  if (refreshedBaseBoat) {
+    await syncBoatSectorRows(boatId, session.user.id, {
+      partyReady: Boolean(updates.partyReady ?? existingPartySector?.boat_id),
+      type: String(updates.type ?? refreshedBaseBoat.type ?? ""),
+      name: String(updates.name ?? refreshedBaseBoat.name ?? ""),
+      location: String(updates.location ?? refreshedBaseBoat.location ?? ""),
+      description: String(updates.description ?? refreshedBaseBoat.description ?? ""),
+      departureMarina: String(updates.departureMarina ?? refreshedBaseBoat.departure_marina ?? ""),
+      capacity: Number(updates.capacity ?? refreshedBaseBoat.capacity ?? 0),
+      ticketMaxPeople: Number(updates.ticketMaxPeople ?? refreshedBaseBoat.capacity ?? 0),
+      ticketPricePerPerson: Number(updates.ticketPricePerPerson ?? 0),
+      partyEventDate: updates.partyEventDate ?? null,
+      partyEventTime: updates.partyEventTime ?? null,
+      partyTiers: Array.isArray((updates as any).partyTiers)
+        ? (updates as any).partyTiers
+        : parsePartyTiers(existingPartySector?.party_tiers),
+      image: String(updates.image ?? refreshedBaseBoat.images ?? refreshedBaseBoat.image ?? ""),
+      status: updates.status ?? refreshedBaseBoat.status,
+      mapQuery: updates.mapQuery ?? refreshedBaseBoat.map_query,
+      flashSaleEnabled: Boolean(updates.flashSaleEnabled ?? refreshedBaseBoat.flash_sale_enabled),
+      pricePerDay: Number(updates.pricePerDay ?? refreshedBaseBoat.price_per_day ?? 0),
+    });
   }
 
   if (updates.features) {

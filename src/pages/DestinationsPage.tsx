@@ -16,9 +16,9 @@ import { withRetry } from "@/lib/retry";
 const DestinationsPage = () => {
   const { tl } = useLanguage();
   useSEO({
-    title: "Greek Island Boating Destinations | Nautiq",
+    title: "Greek Island Boating Destinations | Nautiplex",
     description: "Explore the best Greek island destinations for boat rentals — Mykonos, Santorini, Thassos, Halkidiki and more. Find your perfect sea escape.",
-    canonical: "https://nautiq.gr/destinations",
+    canonical: "https://nautiplex.gr/destinations",
     keywords: "Greek island boat destinations, Mykonos boating, Santorini sailing, Thassos boat trip, Halkidiki boat rental",
   });
 
@@ -48,6 +48,11 @@ const DestinationsPage = () => {
 
   const totalBoats = useMemo(
     () => destinations.reduce((sum, destination) => sum + destination.boats, 0),
+    [destinations],
+  );
+
+  const busiestIslandFleet = useMemo(
+    () => destinations.reduce((max, destination) => Math.max(max, destination.boats), 0),
     [destinations],
   );
 
@@ -108,8 +113,8 @@ const DestinationsPage = () => {
                 <CardContent className="pt-6 flex items-center gap-3">
                   <Sparkles className="h-5 w-5" />
                   <div>
-                    <p className="text-2xl font-heading font-bold">4.8</p>
-                    <p className="text-sm text-primary-foreground/80">{tl("Average ratings", "Μέση βαθμολογία")}</p>
+                    <p className="text-2xl font-heading font-bold">{busiestIslandFleet}</p>
+                    <p className="text-sm text-primary-foreground/80">{tl("Largest island fleet", "Μεγαλύτερος στόλος νησιού")}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -206,10 +211,12 @@ const DestinationsPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-muted-foreground">{destination.description}</p>
-                  <p className="text-sm text-foreground">
-                    <span className="text-muted-foreground">{tl("Best for:", "Κατάλληλο για:")} </span>
-                    {destination.bestFor}
-                  </p>
+                  {destination.bestFor ? (
+                    <p className="text-sm text-foreground">
+                      <span className="text-muted-foreground">{tl("Best for:", "Κατάλληλο για:")} </span>
+                      {destination.bestFor}
+                    </p>
+                  ) : null}
                   <Button asChild className="w-full bg-gradient-accent text-accent-foreground">
                     <Link to={`/boats?location=${encodeURIComponent(destination.name)}`}>
                       {tl("Explore boats in", "Δες σκάφη σε")} {destination.name}
@@ -248,3 +255,4 @@ const DestinationsPage = () => {
 };
 
 export default DestinationsPage;
+

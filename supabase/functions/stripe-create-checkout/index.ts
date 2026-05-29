@@ -81,6 +81,20 @@ const addHoursWithoutOvernightWrap = (timeValue: string, hoursToAdd: number): st
   return `${endHour}:${endMinute}`;
 };
 
+const addHoursAllowWrap = (timeValue: string, hoursToAdd: number): string | null => {
+  if (!isValidTime(timeValue) || !Number.isFinite(hoursToAdd) || hoursToAdd <= 0) {
+    return null;
+  }
+
+  const [hoursPart, minutesPart] = String(timeValue).split(":");
+  const startMinutes = Number(hoursPart) * 60 + Number(minutesPart);
+  const endMinutes = startMinutes + Math.round(hoursToAdd * 60);
+  const normalized = ((endMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const endHour = String(Math.floor(normalized / 60)).padStart(2, "0");
+  const endMinute = String(normalized % 60).padStart(2, "0");
+  return `${endHour}:${endMinute}`;
+};
+
 const isSlotAvailableForRange = (
   occupiedSlots: { start: string; end: string }[],
   departureTime: string,
@@ -114,6 +128,11 @@ type CheckoutRequestBody = {
   paymentPlan?: "deposit" | "full";
   successUrl?: string;
   cancelUrl?: string;
+  isPartyBooking?: boolean;
+  partyEventDate?: string;
+  partyEventTime?: string;
+  partyTierSelected?: string;
+  partyTierPrice?: number;
 };
 
 type BookingTimeRow = {
@@ -184,6 +203,11 @@ Deno.serve(async (req) => {
       paymentPlan,
       successUrl,
       cancelUrl,
+      isPartyBooking,
+      partyEventDate,
+      partyEventTime,
+      partyTierSelected,
+      partyTierPrice,
     } = body ?? {};
 
     if (!boatId || typeof boatId !== "string") {
@@ -290,7 +314,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const bookingEndTime = addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
+    const bookingEndTime = Boolean(isPartyBooking)
+      ? addHoursAllowWrap(selectedDepartureTime, selectedPackageHours)
+      : addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
     if (!bookingEndTime) {
       return new Response(
         JSON.stringify({ error: "Choose a start time that keeps the trip within the same day and max 8 hours." }),
@@ -339,7 +365,7 @@ Deno.serve(async (req) => {
 
     const occupiedSlots = occupiedFromBookings as { start: string; end: string }[];
 
-    if (!isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
+    if (!Boolean(isPartyBooking) && !isSlotAvailableForRange(occupiedSlots, selectedDepartureTime, selectedPackageHours)) {
       return new Response(
         JSON.stringify({ error: "Selected time slot is no longer available." }),
         { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } },
@@ -419,6 +445,19 @@ Deno.serve(async (req) => {
       const customerNameFromEmail = normalizedCustomerEmail
         ? normalizedCustomerEmail.split("@")[0] || "Guest"
         : "Guest";
+      const partyTicketCount = Math.max(1, Number(body.guests ?? 1) || 1);
+
+      // determine end_date when the end time wraps past midnight
+      let bookingEndDate = selectedDate;
+      try {
+        const startMinutes = toMinutes(selectedDepartureTime);
+        const endMinutes = toMinutes(selectedEndTime);
+        if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+          const next = new Date(`${selectedDate}T00:00:00.000Z`);
+          next.setUTCDate(next.getUTCDate() + 1);
+          bookingEndDate = next.toISOString().slice(0, 10);
+        }
+      } catch {}
 
       const { data: createdBooking, error: bookingError } = await supabaseAdmin
         .from("bookings")
@@ -427,18 +466,18 @@ Deno.serve(async (req) => {
           customer_id: customerId ?? null,
           customer_email: normalizedCustomerEmail ?? null,
           start_date: selectedDate,
-          end_date: selectedDate,
+          end_date: bookingEndDate,
           departure_time: selectedDepartureTime,
           start_time: selectedDepartureTime,
           end_time: selectedEndTime,
           package_hours: selectedPackageHours,
+          guests: partyTicketCount,
           total_price: discountedTotal,
           status: "pending",
           boat_name: boat.name,
           owner_name: ownerDisplayName,
           customer_name: customerNameFromEmail,
-          package_label: "Stripe checkout",
-          guests: 1,
+          package_label: Boolean(isPartyBooking) ? "Party tickets" : "Stripe checkout",
           departure_marina: boat.departure_marina ?? "",
           extras: [],
           notes: "",
@@ -448,6 +487,12 @@ Deno.serve(async (req) => {
           deposit_amount: depositAmount,
           platform_commission: platformCommission,
           owner_payout: ownerPayout,
+          ...(isPartyBooking ? {
+            party_event_date: partyEventDate ?? null,
+            party_event_time: partyEventTime ?? null,
+            party_tier_selected: partyTierSelected ?? null,
+            party_tier_price: partyTierPrice ?? null,
+          } : {}),
         })
         .select("id")
         .single();
@@ -586,9 +631,12 @@ Deno.serve(async (req) => {
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
   } catch (error) {
-    console.error("stripe-create-checkout error", error);
+    const errorMessage = error instanceof Error ? error.message : "Unexpected error";
+    const stack = error instanceof Error ? error.stack : "";
+    console.error("stripe-create-checkout error", errorMessage);
+    console.error("Stack:", stack);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unexpected error" }),
+      JSON.stringify({ error: errorMessage, details: stack }),
       { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
   }

@@ -21,7 +21,7 @@ export default function PrivacyPolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">1. Introduction</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq ("we", "us", "our", or "Company") operates the Nautiq platform. This page informs you of our policies regarding the collection, use, and disclosure of personal data when you use our Service and the choices you have associated with that data.
+              Nautiplex ("we", "us", "our", or "Company") operates the Nautiplex platform. This page informs you of our policies regarding the collection, use, and disclosure of personal data when you use our Service and the choices you have associated with that data.
             </p>
           </section>
 
@@ -45,7 +45,7 @@ export default function PrivacyPolicy() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">3. Use of Data</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq uses the collected data for various purposes:
+              Nautiplex uses the collected data for various purposes:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>To provide and maintain our Service</li>
@@ -78,7 +78,7 @@ export default function PrivacyPolicy() {
               If you have any questions about this Privacy Policy, please contact us at:
             </p>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-gray-700">Email: privacy@nautiq.com</p>
+              <p className="text-gray-700">Email: privacy@nautiplex.com</p>
             </div>
           </section>
         </div>
@@ -86,3 +86,4 @@ export default function PrivacyPolicy() {
     </div>
   );
 }
+

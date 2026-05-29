@@ -1,0 +1,24 @@
+{
+  "imports": {
+    "stripe": "https://esm.sh/stripe@16.0.0?target=deno",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.48.0?target=deno"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.unstable"],
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  },
+  "tasks": {
+    "dev": "deno task supabase start"
+  },
+  "fmt": {
+    "semiColons": true,
+    "singleQuote": false
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  }
+}

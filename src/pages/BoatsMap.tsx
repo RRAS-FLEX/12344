@@ -25,10 +25,10 @@ const BoatsMap = () => {
   const [selectedBoatId, setSelectedBoatId] = useState<string>("");
 
   useSEO({
-    title: "Boat Map View | Nautiq",
-    description: "Explore boat pickup locations on the map and open each listing to continue booking in Nautiq.",
-    canonical: "https://nautiq.gr/boats-map",
-    keywords: "boat map Greece, marina map, boat pickup points, nautiq boats map",
+    title: "Boat Map View | Nautiplex",
+    description: "Explore boat pickup locations on the map and open each listing to continue booking in Nautiplex.",
+    canonical: "https://nautiplex.gr/boats-map",
+    keywords: "boat map Greece, marina map, boat pickup points, nautiplex boats map",
   });
 
   const loadBoats = async () => {
@@ -245,3 +245,4 @@ const BoatsMap = () => {
 };
 
 export default BoatsMap;
+

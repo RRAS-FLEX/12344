@@ -25,6 +25,8 @@ export interface BookingRecord {
   partyTicketCode?: string;
   partyTicketCount?: number;
   partyTicketStatus?: "issued" | "void";
+  partyTierSelected?: string | null;
+  partyTierPrice?: number | null;
   amountDueNow: number;
   depositAmount: number;
   platformCommission: number;
@@ -79,6 +81,8 @@ export interface ConfirmBookingInput {
   flashSaleEnabled?: boolean;
   // voucher fields removed
   partyReady?: boolean;
+  partyTierSelected?: string | null;
+  partyTierPrice?: number | null;
   extras: string[];
   notes: string;
   queueCustomerEmail: boolean;
@@ -145,6 +149,8 @@ type CreatedBookingRow = {
   party_ticket_code?: string | null;
   party_ticket_count?: number | null;
   party_ticket_status?: string | null;
+  party_tier_selected?: string | null;
+  party_tier_price?: number | null;
   extras?: unknown;
   notes?: string | null;
 };
@@ -540,12 +546,22 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
     throw new Error("Invalid departure time.");
   }
 
-  const bookingEndTime = addHoursWithoutOvernightWrap(input.departureTime, input.packageHours);
+  const isPartyBooking = Boolean(input.partyReady);
+
+  // For regular bookings we enforce the same-day restriction; for party bookings
+  // allow overnight wrap (party events may continue past midnight).
+  const bookingEndTime = isPartyBooking
+    ? addHoursToTime(input.departureTime, input.packageHours)
+    : addHoursWithoutOvernightWrap(input.departureTime, input.packageHours);
+
   if (!bookingEndTime) {
+    if (isPartyBooking) {
+      throw new Error("Invalid departure time for party booking.");
+    }
     throw new Error("Choose a start time that keeps the trip within the same day and max 8 hours.");
   }
 
-  if (!isInsideOperatingWindow(input.departureTime, bookingEndTime)) {
+  if (!isPartyBooking && !isInsideOperatingWindow(input.departureTime, bookingEndTime)) {
     throw new Error("Choose a start time within operating hours (07:00-20:00).");
   }
 
@@ -567,10 +583,22 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
     paymentPlan: input.paymentPlan,
   });
 
-  const isPartyBooking = Boolean(input.partyReady);
   const partyTicketCode = isPartyBooking ? generatePartyTicketCode() : null;
   const partyTicketCount = isPartyBooking ? Math.max(1, Number(input.guests) || 1) : 0;
   const partyTicketStatus = isPartyBooking ? "issued" : null;
+
+  // If the booking end time wrapped past midnight, set end_date to the next day.
+  let bookingEndDate = input.date;
+  try {
+    const startMinutes = toMinutes(input.departureTime);
+    const endMinutes = toMinutes(bookingEndTime);
+    if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+      // wrapped to next day
+      const next = new Date(`${input.date}T00:00:00.000Z`);
+      next.setUTCDate(next.getUTCDate() + 1);
+      bookingEndDate = next.toISOString().slice(0, 10);
+    }
+  } catch {}
 
   const { data: bookingRowRaw, error: bookingError } = await supabase
     .from("bookings")
@@ -584,7 +612,7 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
       package_label: input.packageLabel,
       guests: input.guests,
       start_date: input.date,
-      end_date: input.date,
+      end_date: bookingEndDate,
       departure_time: input.departureTime,
       start_time: input.departureTime,
       end_time: bookingEndTime,
@@ -601,6 +629,8 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
       party_ticket_code: partyTicketCode,
       party_ticket_count: partyTicketCount,
       party_ticket_status: partyTicketStatus,
+      party_tier_selected: input.partyTierSelected ?? null,
+      party_tier_price: input.partyTierPrice ?? null,
       extras: input.extras,
       notes: input.notes,
       status: "confirmed",
@@ -662,6 +692,8 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
     partyTicketCode: bookingRow.party_ticket_code ?? partyTicketCode ?? undefined,
     partyTicketCount: Number(bookingRow.party_ticket_count ?? partyTicketCount),
     partyTicketStatus: (bookingRow.party_ticket_status as "issued" | "void" | null) ?? (partyTicketStatus as "issued" | null) ?? undefined,
+    partyTierSelected: bookingRow.party_tier_selected ?? input.partyTierSelected ?? null,
+    partyTierPrice: Number(bookingRow.party_tier_price ?? input.partyTierPrice ?? 0) || null,
     extras: Array.isArray(bookingRow.extras) ? bookingRow.extras : input.extras,
     notes: bookingRow.notes ?? input.notes,
     status: "confirmed",

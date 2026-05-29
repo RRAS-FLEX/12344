@@ -87,7 +87,9 @@ const Destinations = () => {
                 </h3>
                 <p className="text-sm text-primary-foreground/70">{dest.boats} {tl("boats available", "διαθέσιμα σκάφη")}</p>
                 <p className="text-xs text-primary-foreground/80 mt-2 line-clamp-2">{dest.description}</p>
-                <p className="text-[11px] text-primary-foreground/80 mt-1">{tl("Best for", "Ιδανικό για")}: {dest.bestFor}</p>
+                {dest.bestFor ? (
+                  <p className="text-[11px] text-primary-foreground/80 mt-1">{tl("Best for", "Ιδανικό για")}: {dest.bestFor}</p>
+                ) : null}
               </div>
             </motion.div>
             </Link>

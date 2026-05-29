@@ -1,4 +1,4 @@
-import NautiqLogo from "./NautiqLogo";
+import NautiplexLogo from "./NautiplexLogo";
 import { Link } from "react-router-dom";
 import { Instagram, Facebook, Twitter, Music2 } from "lucide-react";
 
@@ -8,7 +8,7 @@ const Footer = () => {
       <div className="w-full max-w-10xl mx-auto px-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
           <div className="col-span-2 md:col-span-1">
-            <NautiqLogo />
+            <NautiplexLogo />
             <p className="text-sm text-muted-foreground mt-3 max-w-xs">
               The Mediterranean's marketplace for boat rentals and sea experiences.
             </p>
@@ -96,3 +96,4 @@ const Footer = () => {
 };
 
 export default Footer;
+

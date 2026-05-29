@@ -21,8 +21,8 @@ interface BoatLocationMapCanvasProps {
 
 const createMarkerIcon = (isActive: boolean) =>
   L.divIcon({
-    className: "nautiq-map-marker-wrapper",
-    html: `<span class="nautiq-map-marker${isActive ? " is-active" : ""}"></span>`,
+    className: "nautiplex-map-marker-wrapper",
+    html: `<span class="nautiplex-map-marker${isActive ? " is-active" : ""}"></span>`,
     iconSize: isActive ? [24, 24] : [18, 18],
     iconAnchor: isActive ? [12, 12] : [9, 9],
   });
@@ -99,7 +99,7 @@ const BoatLocationMapCanvas = ({ points, selectedPointId, onSelectPoint, default
               }}
             >
               <Popup>
-                <div className="nautiq-map-popup-card space-y-1.5">
+                <div className="nautiplex-map-popup-card space-y-1.5">
                   <p className="font-semibold text-foreground text-xs leading-tight">{point.name}</p>
                   {point.subtitle ? <p className="text-[11px] text-muted-foreground leading-tight">{point.subtitle}</p> : null}
                   {(point.type || point.capacity || point.pricePerDay || point.rating !== undefined) ? (

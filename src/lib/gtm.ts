@@ -1,10 +1,10 @@
-declare global {
+﻿declare global {
   interface Window {
     dataLayer?: Array<Record<string, unknown>>;
   }
 }
 
-const GTM_SCRIPT_ID = "nautiq-gtm-script";
+const GTM_SCRIPT_ID = "nautiplex-gtm-script";
 
 const isValidGtmId = (value: string | undefined) => Boolean(value && /^GTM-[A-Z0-9]+$/i.test(value));
 
@@ -33,3 +33,4 @@ export const initializeGTM = (gtmId?: string) => {
   script.src = `https://www.googletagmanager.com/gtm.js?id=${encodeURIComponent(gtmId)}`;
   document.head.appendChild(script);
 };
+

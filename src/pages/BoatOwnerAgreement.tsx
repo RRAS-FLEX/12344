@@ -21,14 +21,14 @@ export default function BoatOwnerAgreement() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">1. Overview</h2>
             <p className="text-gray-700 leading-relaxed">
-              This Boat Owner Agreement ("Agreement") establishes the terms and conditions under which boat owners ("Owner") may list and rent their vessels through the Nautiq platform ("Platform") to customers ("Renter" or "Guest").
+              This Boat Owner Agreement ("Agreement") establishes the terms and conditions under which boat owners ("Owner") may list and rent their vessels through the Nautiplex platform ("Platform") to customers ("Renter" or "Guest").
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">2. Owner Eligibility</h2>
             <p className="text-gray-700 leading-relaxed">
-              To list a boat on Nautiq, you must:
+              To list a boat on Nautiplex, you must:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Be at least 21 years old</li>
@@ -58,13 +58,13 @@ export default function BoatOwnerAgreement() {
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">4. Pricing and Payments</h2>
             <p className="text-gray-700 leading-relaxed">
-              <strong>Revenue Split:</strong> Nautiq retains 20% of the booking price as a service fee. You will receive 80% of the rented amount minus any applicable taxes and processing fees.
+              <strong>Revenue Split:</strong> Nautiplex retains 20% of the booking price as a service fee. You will receive 80% of the rented amount minus any applicable taxes and processing fees.
             </p>
             <p className="text-gray-700 leading-relaxed mt-4">
               Payments are processed through our secure payment system and transferred to your linked bank account within 5-10 business days after each booking completion.
             </p>
             <p className="text-gray-700 leading-relaxed mt-4">
-              You are responsible for setting competitive pricing, managing discounts, and defining your own cancellation policy within the guidelines set by Nautiq.
+              You are responsible for setting competitive pricing, managing discounts, and defining your own cancellation policy within the guidelines set by Nautiplex.
             </p>
           </section>
 
@@ -97,7 +97,7 @@ export default function BoatOwnerAgreement() {
               <li>Your insurance coverage is adequate and includes rental activities</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              <strong>Liability:</strong> You assume all liability for injuries, damages, or losses that occur during rental periods. Nautiq is not responsible for damages to your boat, injuries to renters, or property loss during rentals.
+              <strong>Liability:</strong> You assume all liability for injuries, damages, or losses that occur during rental periods. Nautiplex is not responsible for damages to your boat, injuries to renters, or property loss during rentals.
             </p>
           </section>
 
@@ -113,7 +113,7 @@ export default function BoatOwnerAgreement() {
               <li>Third-party injury coverage</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              Nautiq reserves the right to request proof of insurance. Operating a boat on the Platform without adequate insurance may result in immediate suspension.
+              Nautiplex reserves the right to request proof of insurance. Operating a boat on the Platform without adequate insurance may result in immediate suspension.
             </p>
           </section>
 
@@ -126,10 +126,10 @@ export default function BoatOwnerAgreement() {
               <li>Document the boat's condition before each rental with photos/video</li>
               <li>Request security deposits from renters (amount determined by you)</li>
               <li>Report damages or issues immediately through the Platform</li>
-              <li>File claims with the renter's insurance or through Nautiq's dispute resolution process</li>
+              <li>File claims with the renter's insurance or through Nautiplex's dispute resolution process</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              Nautiq does not act as an intermediary for damage claims but provides tools to facilitate dispute resolution.
+              Nautiplex does not act as an intermediary for damage claims but provides tools to facilitate dispute resolution.
             </p>
           </section>
 
@@ -145,14 +145,14 @@ export default function BoatOwnerAgreement() {
               <li>Maintain a professional communication standard with renters</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              Owners with sustained low ratings may be removed from the Platform at Nautiq's discretion.
+              Owners with sustained low ratings may be removed from the Platform at Nautiplex's discretion.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">10. Suspension and Termination</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq may suspend or terminate your listing if you:
+              Nautiplex may suspend or terminate your listing if you:
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-700">
               <li>Violate the terms of this Agreement</li>
@@ -164,21 +164,21 @@ export default function BoatOwnerAgreement() {
               <li>Receive sustained complaints from renters</li>
             </ul>
             <p className="text-gray-700 leading-relaxed mt-4">
-              In cases of immediate safety risk, Nautiq may suspend your listing without warning.
+              In cases of immediate safety risk, Nautiplex may suspend your listing without warning.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">11. Disputes and Mediation</h2>
             <p className="text-gray-700 leading-relaxed">
-              Any disputes between you and a renter should be resolved through the Platform's messaging system. If direct resolution is not possible, Nautiq offers a mediation service. Both parties agree to attempt mediation before pursuing legal action.
+              Any disputes between you and a renter should be resolved through the Platform's messaging system. If direct resolution is not possible, Nautiplex offers a mediation service. Both parties agree to attempt mediation before pursuing legal action.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-xl sm:text-2xl font-semibold text-ocean">12. Changes to This Agreement</h2>
             <p className="text-gray-700 leading-relaxed">
-              Nautiq may modify this Agreement at any time. We will provide 30 days' notice of material changes. Continued use of the Platform signifies acceptance of updated terms.
+              Nautiplex may modify this Agreement at any time. We will provide 30 days' notice of material changes. Continued use of the Platform signifies acceptance of updated terms.
             </p>
           </section>
 
@@ -188,7 +188,7 @@ export default function BoatOwnerAgreement() {
               For questions about this Boat Owner Agreement or to report issues, please contact our Owner Support team:
             </p>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-gray-700">Email: owners@nautiq.com</p>
+              <p className="text-gray-700">Email: owners@nautiplex.com</p>
               <p className="text-gray-700 mt-2">Phone: Available through your owner dashboard</p>
             </div>
           </section>
@@ -197,3 +197,4 @@ export default function BoatOwnerAgreement() {
     </div>
   );
 }
+

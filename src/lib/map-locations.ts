@@ -1,4 +1,4 @@
-export interface MapCoordinates {
+﻿export interface MapCoordinates {
   lat: number;
   lng: number;
 }
@@ -8,7 +8,7 @@ export interface ReverseGeocodeResult {
   city: string;
 }
 
-const MAP_CACHE_KEY = "nautiq:map-geocode-cache:v1";
+const MAP_CACHE_KEY = "nautiplex:map-geocode-cache:v1";
 
 const DEFAULT_GREECE_COORDINATES: MapCoordinates = {
   lat: 38.4,

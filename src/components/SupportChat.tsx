@@ -15,7 +15,7 @@ interface SupportMessage {
   createdAt: string;
 }
 
-const SUPPORT_NAME = "Nautiq Support";
+const SUPPORT_NAME = "Nautiplex Support";
 const MAX_LENGTH = 280;
 
 const supportReplies = (userText: string): string => {
@@ -33,10 +33,10 @@ const supportReplies = (userText: string): string => {
   if (t.includes("review") || t.includes("αξιολόγηση"))
     return "Reviews become available once your trip date has passed. You'll see a 'Leave a review' button on your History page.";
   if (t.includes("hello") || t.includes("hi") || t.includes("hey") || t.includes("γεια"))
-    return "Hey! How can Nautiq Support help you today?";
+    return "Hey! How can Nautiplex Support help you today?";
   if (t.includes("thank") || t.includes("ευχαριστώ"))
-    return "Happy to help! Enjoy your journey with Nautiq 🌊";
-  return "I'll look into that for you! If it's urgent, you can also email us at support@nautiq.com. Is there anything else I can help with?";
+    return "Happy to help! Enjoy your journey with Nautiplex 🌊";
+  return "I'll look into that for you! If it's urgent, you can also email us at support@nautiplex.com. Is there anything else I can help with?";
 };
 
 const SupportAvatar = () => (
@@ -86,7 +86,7 @@ const TypingIndicator = () => (
 const greetingMessage = (): SupportMessage => ({
   id: "greeting",
   sender: "support",
-  text: "Hi! I'm Nautiq Support 👋 Ask me anything about bookings, payments, maps, or how the platform works.",
+  text: "Hi! I'm Nautiplex Support 👋 Ask me anything about bookings, payments, maps, or how the platform works.",
   createdAt: new Date().toISOString(),
 });
 
@@ -276,3 +276,4 @@ export const SupportChat = () => {
 };
 
 export default SupportChat;
+

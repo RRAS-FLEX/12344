@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { resolveStorageImage } from "./storage-public";
+import { syncBoatSectorRows, isWatersportsType } from "./owner-dashboard";
 
 const sb = supabase as any;
 
@@ -129,6 +130,32 @@ export const addOwnerBoat = async (
     throw new Error(boatError?.message || "Failed to create boat");
   }
 
+  try {
+    // Sync sector-specific row (party / watersports) based on type
+    const isParty = String(newBoat.type ?? "").toLowerCase().includes("party");
+    await syncBoatSectorRows(newBoat.id, session.user.id, {
+      partyReady: Boolean(isParty),
+      type: String(newBoat.type ?? ""),
+      name: String(newBoat.name ?? ""),
+      location: String(newBoat.location ?? ""),
+      description: String(newBoat.description ?? ""),
+      departureMarina: String(newBoat.departure_marina ?? ""),
+      capacity: Number(newBoat.capacity ?? 0),
+      ticketMaxPeople: Number(newBoat.capacity ?? 0),
+      ticketPricePerPerson: Number(0),
+      partyEventDate: null,
+      partyEventTime: null,
+      partyTiers: [],
+      image: String(newBoat.image ?? ""),
+      status: newBoat.status ?? "active",
+      mapQuery: newBoat.map_query ?? "",
+      flashSaleEnabled: Boolean(newBoat.flash_sale_enabled),
+      pricePerDay: Number(newBoat.price_per_day ?? 0),
+    });
+  } catch (err) {
+    console.error("Failed to sync sector row after supabase-owner-dashboard insert", err);
+  }
+
   // Insert features
   if (boat.features.length > 0) {
     const featureRows = boat.features.map((feature) => ({
@@ -235,6 +262,35 @@ export const updateOwnerBoat = async (
         console.error("Error updating features:", featuresError);
       }
     }
+  }
+
+  // After updating base boat, ensure sector overlay rows are synced
+  try {
+    const { data: refreshedBaseBoat } = await sb.from("boats").select("*").eq("id", boatId).maybeSingle();
+    if (refreshedBaseBoat) {
+      const isParty = String(refreshedBaseBoat.type ?? "").toLowerCase().includes("party");
+      await syncBoatSectorRows(boatId, session.user.id, {
+        partyReady: Boolean(isParty),
+        type: String(refreshedBaseBoat.type ?? ""),
+        name: String(refreshedBaseBoat.name ?? ""),
+        location: String(refreshedBaseBoat.location ?? ""),
+        description: String(refreshedBaseBoat.description ?? ""),
+        departureMarina: String(refreshedBaseBoat.departure_marina ?? ""),
+        capacity: Number(refreshedBaseBoat.capacity ?? 0),
+        ticketMaxPeople: Number(refreshedBaseBoat.capacity ?? 0),
+        ticketPricePerPerson: Number(0),
+        partyEventDate: null,
+        partyEventTime: null,
+        partyTiers: [],
+        image: String(refreshedBaseBoat.image ?? ""),
+        status: refreshedBaseBoat.status ?? "active",
+        mapQuery: refreshedBaseBoat.map_query ?? "",
+        flashSaleEnabled: Boolean(refreshedBaseBoat.flash_sale_enabled),
+        pricePerDay: Number(refreshedBaseBoat.price_per_day ?? 0),
+      });
+    }
+  } catch (err) {
+    console.error("Failed to sync sector row after supabase-owner-dashboard update", err);
   }
 };
 

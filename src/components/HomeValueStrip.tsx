@@ -42,10 +42,10 @@ const HomeValueStrip = () => {
       <div className="container mx-auto px-4">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <p className="text-sm font-semibold text-foreground">
-            {tl("Why travelers and owners pick Nautiq", "Γιατί ταξιδιώτες και ιδιοκτήτες επιλέγουν Nautiq")}
+            {tl("Why travelers and owners pick Nautiplex", "Γιατί ταξιδιώτες και ιδιοκτήτες επιλέγουν Nautiplex")}
           </p>
           <Link to="/about" className="text-sm font-medium text-aegean hover:text-turquoise transition-colors">
-            {tl("See how Nautiq works →", "Δες πώς λειτουργεί το Nautiq →")}
+            {tl("See how Nautiplex works →", "Δες πώς λειτουργεί το Nautiplex →")}
           </Link>
         </div>
 
@@ -73,3 +73,4 @@ const HomeValueStrip = () => {
 };
 
 export default HomeValueStrip;
+

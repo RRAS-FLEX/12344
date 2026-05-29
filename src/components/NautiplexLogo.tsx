@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 
-const NautiqLogo = ({ className = "" }: { className?: string }) => (
+const NautiplexLogo = ({ className = "" }: { className?: string }) => (
   <Link to="/" className={`flex items-center gap-2 ${className}`}>
     <img
       src="/nautiplex_logo.png"
@@ -20,4 +20,5 @@ const NautiqLogo = ({ className = "" }: { className?: string }) => (
   </Link>
 );
 
-export default NautiqLogo;
+export default NautiplexLogo;
+

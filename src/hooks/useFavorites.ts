@@ -1,16 +1,25 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { supabase } from "@/lib/supabase";
 
-const STORAGE_KEY = "nautiq_favorites";
+const STORAGE_KEY = "nautiplex_favorites";
+const LEGACY_STORAGE_KEY = "nautiq_favorites";
 const remoteFavoritesCache = new Map<string, Set<string>>();
 const remoteSyncInFlight = new Map<string, Promise<Set<string>>>();
 
 const loadFavorites = (): Set<string> => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return new Set();
-    return new Set(JSON.parse(raw) as string[]);
+
+    const parsed = new Set(JSON.parse(raw) as string[]);
+
+    if (!localStorage.getItem(STORAGE_KEY) && parsed.size > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...parsed]));
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+    }
+
+    return parsed;
   } catch {
     return new Set();
   }
@@ -175,3 +184,4 @@ export const useFavorites = () => {
 
   return { favoriteIds: [...favoriteIds], isFavorite, toggleFavorite };
 };
+

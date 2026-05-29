@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -147,7 +147,7 @@
     box-shadow: 0 12px 40px -8px hsl(var(--ocean) / 0.15);
   }
 
-  .nautiq-map-marker {
+  .nautiplex-map-marker {
     display: block;
     width: 18px;
     height: 18px;
@@ -157,7 +157,7 @@
     box-shadow: 0 10px 24px hsl(var(--ocean) / 0.22);
   }
 
-  .nautiq-map-marker.is-active {
+  .nautiplex-map-marker.is-active {
     width: 24px;
     height: 24px;
     border-color: hsl(var(--card));
@@ -183,7 +183,8 @@
     z-index: 20 !important;
   }
 
-  .nautiq-map-popup-card {
+  .nautiplex-map-popup-card {
     width: min(200px, calc(100vw - 110px));
   }
 }
+

@@ -21,6 +21,7 @@ interface BoatCardProps {
   rating: number;
   index: number;
   reviewCount?: number;
+  favoriteCount?: number;
   owner?: BoatOwner;
   partyReady?: boolean;
 }
@@ -41,6 +42,7 @@ const BoatCard = ({
   rating,
   index,
   reviewCount,
+  favoriteCount,
   owner,
   partyReady,
 }: BoatCardProps) => {
@@ -178,6 +180,12 @@ const BoatCard = ({
               <Users className="h-3.5 w-3.5" />
               {capacity} guests
             </span>
+            {typeof favoriteCount === "number" ? (
+              <span className="flex items-center gap-1 text-xs">
+                <Heart className="h-3.5 w-3.5" />
+                {favoriteCount}
+              </span>
+            ) : null}
             {typeof reviewCount === "number" ? (
               <span className="text-xs">{reviewCount} reviews</span>
             ) : null}

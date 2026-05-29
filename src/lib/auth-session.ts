@@ -1,5 +1,7 @@
-const AUTH_PERSISTENCE_KEY = "nautiq.auth.rememberMe";
-const AUTH_REMEMBERED_AT_KEY = "nautiq.auth.rememberedAt";
+﻿const AUTH_PERSISTENCE_KEY = "nautiplex.auth.rememberMe";
+const AUTH_REMEMBERED_AT_KEY = "nautiplex.auth.rememberedAt";
+const LEGACY_AUTH_PERSISTENCE_KEY = "nautiq.auth.rememberMe";
+const LEGACY_AUTH_REMEMBERED_AT_KEY = "nautiq.auth.rememberedAt";
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const canUseBrowserStorage = () => typeof window !== "undefined";
@@ -44,7 +46,36 @@ const getSessionStorage = () => {
   return window.sessionStorage;
 };
 
+const migrateAuthPreferenceKeys = () => {
+  const storage = getPersistentStorage();
+  if (!storage) {
+    return;
+  }
+
+  const hasNextRemember = readBrowserStorage(storage, AUTH_PERSISTENCE_KEY);
+  const legacyRemember = readBrowserStorage(storage, LEGACY_AUTH_PERSISTENCE_KEY);
+  if (hasNextRemember === null && legacyRemember !== null) {
+    writeBrowserStorage(storage, AUTH_PERSISTENCE_KEY, legacyRemember);
+  }
+
+  const hasNextRememberedAt = readBrowserStorage(storage, AUTH_REMEMBERED_AT_KEY);
+  const legacyRememberedAt = readBrowserStorage(storage, LEGACY_AUTH_REMEMBERED_AT_KEY);
+  if (hasNextRememberedAt === null && legacyRememberedAt !== null) {
+    writeBrowserStorage(storage, AUTH_REMEMBERED_AT_KEY, legacyRememberedAt);
+  }
+
+  if (legacyRemember !== null) {
+    removeBrowserStorage(storage, LEGACY_AUTH_PERSISTENCE_KEY);
+  }
+
+  if (legacyRememberedAt !== null) {
+    removeBrowserStorage(storage, LEGACY_AUTH_REMEMBERED_AT_KEY);
+  }
+};
+
 export const getRememberMePreference = (): boolean => {
+  migrateAuthPreferenceKeys();
+
   const storage = getPersistentStorage();
   if (!storage) {
     return false;
@@ -54,6 +85,8 @@ export const getRememberMePreference = (): boolean => {
 };
 
 export const setRememberMePreference = (rememberMe: boolean) => {
+  migrateAuthPreferenceKeys();
+
   const storage = getPersistentStorage();
   if (!storage) {
     return;
@@ -63,6 +96,8 @@ export const setRememberMePreference = (rememberMe: boolean) => {
 };
 
 export const ensureRememberedSessionIssuedAt = () => {
+  migrateAuthPreferenceKeys();
+
   if (!getRememberMePreference()) {
     return;
   }
@@ -81,6 +116,8 @@ export const ensureRememberedSessionIssuedAt = () => {
 };
 
 export const markRememberedSessionIssuedAt = () => {
+  migrateAuthPreferenceKeys();
+
   if (!getRememberMePreference()) {
     return;
   }
@@ -94,6 +131,8 @@ export const markRememberedSessionIssuedAt = () => {
 };
 
 export const clearRememberedSessionIssuedAt = () => {
+  migrateAuthPreferenceKeys();
+
   const storage = getPersistentStorage();
   if (!storage) {
     return;
@@ -103,6 +142,8 @@ export const clearRememberedSessionIssuedAt = () => {
 };
 
 export const isRememberedSessionExpired = (maxAgeMs = THIRTY_DAYS_MS) => {
+  migrateAuthPreferenceKeys();
+
   if (!getRememberMePreference()) {
     return false;
   }
@@ -194,3 +235,4 @@ export const createAuthStorageAdapter = () => ({
     }
   },
 });
+

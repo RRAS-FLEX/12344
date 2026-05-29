@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAuthStorageAdapter } from "./auth-session";
 
@@ -355,7 +355,36 @@ const isServiceRoleKey = (token: string) => {
 
 let supabase: SupabaseClient<Database> | null = null;
 
+const migrateLegacyAuthTokenStorageKey = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const nextKey = "nautiplex.auth.token";
+  const legacyKey = "nautiq.auth.token";
+
+  const nextLocal = window.localStorage.getItem(nextKey);
+  const legacyLocal = window.localStorage.getItem(legacyKey);
+  if (!nextLocal && legacyLocal) {
+    window.localStorage.setItem(nextKey, legacyLocal);
+  }
+  if (legacyLocal) {
+    window.localStorage.removeItem(legacyKey);
+  }
+
+  const nextSession = window.sessionStorage.getItem(nextKey);
+  const legacySession = window.sessionStorage.getItem(legacyKey);
+  if (!nextSession && legacySession) {
+    window.sessionStorage.setItem(nextKey, legacySession);
+  }
+  if (legacySession) {
+    window.sessionStorage.removeItem(legacyKey);
+  }
+};
+
 if (supabaseUrl && supabaseAnonKey && isAllowedSupabaseUrl(supabaseUrl) && !isServiceRoleKey(supabaseAnonKey)) {
+  migrateLegacyAuthTokenStorageKey();
+
   const authStorage = createAuthStorageAdapter();
 
   supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -364,7 +393,7 @@ if (supabaseUrl && supabaseAnonKey && isAllowedSupabaseUrl(supabaseUrl) && !isSe
       autoRefreshToken: true,
       detectSessionInUrl: true,
       flowType: "pkce",
-      storageKey: "nautiq.auth.token",
+      storageKey: "nautiplex.auth.token",
       storage: authStorage,
     },
   });
@@ -426,4 +455,5 @@ export type DatabaseUsersRow = DatabaseTables["users"]["Row"];
 export type DatabaseUsersInsert = DatabaseTables["users"]["Insert"];
 
 export type DatabaseUsersUpdate = DatabaseTables["users"]["Update"];
+
 

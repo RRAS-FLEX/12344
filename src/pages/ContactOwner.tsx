@@ -76,8 +76,8 @@ const ContactOwner = () => {
                 <CardTitle>{tl("Other ways to reach owner", "Άλλοι τρόποι επικοινωνίας")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">{boat?.owner.name ?? "Nautiq host team"}</p>
-                <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-aegean" />owner@nautiq.com</p>
+                <p className="font-medium text-foreground">{boat?.owner.name ?? "Nautiplex host team"}</p>
+                <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-aegean" />owner@nautiplex.com</p>
                 <p className="flex items-center gap-2"><PhoneCall className="h-4 w-4 text-aegean" />{phoneNumber}</p>
                 <div className="grid grid-cols-1 gap-3">
                   <Button asChild className="w-full bg-[#25D366] text-white hover:bg-[#25D366]/90">
@@ -102,3 +102,4 @@ const ContactOwner = () => {
 };
 
 export default ContactOwner;
+

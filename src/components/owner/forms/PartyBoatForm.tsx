@@ -31,6 +31,16 @@ interface PartyBoatFormProps {
   onSubmit?: () => void;
 }
 
+interface TicketType {
+  id: string;
+  name: string;
+  price: number;
+  description: string;
+  benefits: string[];
+  discount?: number;
+  discountType?: "fixed" | "percentage";
+}
+
 const PARTY_TYPE_OPTIONS = ["Party Boat", "Watersports Charter"];
 const PARTY_AMENITIES = [
   "Dance Floor",
@@ -45,6 +55,17 @@ const PARTY_AMENITIES = [
   "BBQ Area",
 ];
 
+const COMMON_BENEFITS = [
+  "Premium Food & Drinks",
+  "VIP Seating",
+  "Exclusive DJ Access",
+  "Photography Service",
+  "Early Access",
+  "Guest Spot on Stage",
+  "Champagne Upgrade",
+  "Private Table",
+];
+
 const createLocalId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -57,6 +78,8 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
   const { toast } = useToast();
   const isEdit = Boolean(boat);
   const [currentStep, setCurrentStep] = useState(1);
+  const activeBoatIdRef = useRef<string | null>(boat?.id ?? null);
+  const [planType, setPlanType] = useState<"basic" | "custom">(boat?.partyTiers ? "custom" : "basic");
 
   const [formData, setFormData] = useState({
     name: boat?.name ?? "",
@@ -73,6 +96,8 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
     flashSaleEnabled: boat?.flashSaleEnabled ?? false,
     image: boat?.image ?? "",
     status: boat?.status ?? "active",
+    partyEventDate: boat?.partyEventDate ?? "",
+    partyEventTime: boat?.partyEventTime ?? "10:00",
   });
 
   const [amenities, setAmenities] = useState<string[]>(boat?.features ?? []);
@@ -80,9 +105,87 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [extras, setExtras] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [packages, setPackages] = useState<Array<{ id: string; name: string; duration: number; price: number; description: string }>>([]);
+  
+  // Custom plan ticket types
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>(
+    boat?.partyTiers && Array.isArray(boat.partyTiers)
+      ? boat.partyTiers.map((tier) => ({
+          id: createLocalId(),
+          name: tier.name,
+          price: tier.price,
+          description: "",
+          benefits: [],
+          discount: 0,
+          discountType: "fixed",
+        }))
+      : []
+  );
+  
+  // Form for adding new ticket type
+  const [newTicketType, setNewTicketType] = useState<Partial<TicketType>>({
+    name: "",
+    price: 0,
+    description: "",
+    benefits: [],
+    discount: 0,
+    discountType: "fixed",
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const ticketPricePerPerson = Number(formData.pricePerEvent);
   const eventTotalValue = ticketPricePerPerson * Math.max(1, Number(formData.capacity) || 1);
+
+  useEffect(() => {
+    if (!boat?.id || activeBoatIdRef.current === boat.id) {
+      return;
+    }
+
+    activeBoatIdRef.current = boat.id;
+    setCurrentStep(1);
+    setPlanType(boat.partyTiers && boat.partyTiers.length > 0 ? "custom" : "basic");
+    setFormData({
+      name: boat?.name ?? "",
+      type: boat?.type ?? "Party Boat",
+      location: boat?.location ?? "Thassos",
+      description: boat?.description ?? "",
+      departureMarina: boat?.departureMarina ?? "",
+      capacity: boat?.capacity ?? 20,
+      pricePerEvent: boat?.ticketPricePerPerson ?? 120,
+      maxEventHours: 8,
+      eventSetupTime: 1,
+      cancelPolicy: 7,
+      mapQuery: boat?.mapQuery ?? "",
+      flashSaleEnabled: boat?.flashSaleEnabled ?? false,
+      image: boat?.image ?? "",
+      status: boat?.status ?? "active",
+      partyEventDate: boat?.partyEventDate ?? "",
+      partyEventTime: boat?.partyEventTime ?? "",
+    });
+    setAmenities(boat?.features ?? []);
+    setLocalImagePreview("");
+    setImageFile(null);
+    setTicketTypes(
+      boat?.partyTiers && Array.isArray(boat.partyTiers)
+        ? boat.partyTiers.map((tier) => ({
+            id: createLocalId(),
+            name: tier.name,
+            price: tier.price,
+            description: "",
+            benefits: [],
+            discount: 0,
+            discountType: "fixed",
+          }))
+        : [],
+    );
+    setNewTicketType({
+      name: "",
+      price: 0,
+      description: "",
+      benefits: [],
+      discount: 0,
+      discountType: "fixed",
+    });
+  }, [boat]);
 
   useEffect(() => {
     let cancelled = false;
@@ -214,6 +317,14 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
     try {
       setIsSubmitting(true);
 
+      // Convert ticket types to party tiers format
+      const partyTiers = planType === "custom" && ticketTypes.length > 0
+        ? ticketTypes.map((tier) => ({
+            name: tier.name,
+            price: tier.price,
+          }))
+        : [];
+
       const boatInput = {
         name: formData.name,
         type: formData.type,
@@ -227,7 +338,10 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
         mapQuery: formData.mapQuery,
         flashSaleEnabled: formData.flashSaleEnabled,
         partyReady: true,
-        // voucher fields removed
+        partyEventDate: formData.partyEventDate || null,
+        partyEventTime: formData.partyEventTime || null,
+        partyTiers: partyTiers.length > 0 ? partyTiers : null,
+        // Store custom ticket details as JSON in description or metadata
         features: amenities,
       };
 
@@ -377,43 +491,32 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
   if (currentStep === 2) {
     return (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 overflow-y-auto">
-        <Card className="w-full max-w-2xl">
+        <Card className="w-full max-w-4xl">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>{tl("Add Party Boat - Details", "Προσθήκη Σκάφους Πάρτι - Λεπτομέρειες")}</span>
+              <span>{tl("Party Boat - Pricing & Details", "Σκάφος Πάρτι - Τιμές & Λεπτομέρειες")}</span>
               <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6 max-h-[600px] overflow-y-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CardContent className="space-y-6 max-h-[700px] overflow-y-auto">
+            {/* Event Date & Time */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>{tl("Ticket price per person (€)", "Τιμή εισιτηρίου ανά άτομο (€)")}</Label>
+                <Label>{tl("Event date", "Ημερομηνία εκδήλωσης")}</Label>
                 <Input
-                  type="number"
-                  value={formData.pricePerEvent}
-                  onChange={(e) => setFormData({ ...formData, pricePerEvent: Number(e.target.value) })}
+                  type="date"
+                  value={formData.partyEventDate}
+                  onChange={(e) => setFormData({ ...formData, partyEventDate: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>{tl("Event total value (€)", "Συνολική αξία εκδήλωσης (€)")}</Label>
-                <Input value={eventTotalValue.toFixed(2)} readOnly />
-              </div>
-              <div className="space-y-2">
-                <Label>{tl("Max event duration (hours)", "Μέγ. διάρκεια εκδήλωσης (ώρες)")}</Label>
+                <Label>{tl("Event start time", "Ώρα έναρξης")}</Label>
                 <Input
-                  type="number"
-                  value={formData.maxEventHours}
-                  onChange={(e) => setFormData({ ...formData, maxEventHours: Number(e.target.value) })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{tl("Setup time needed (hours)", "Απαιτούμενος χρόνος ρύθμισης (ώρες)")}</Label>
-                <Input
-                  type="number"
-                  value={formData.eventSetupTime}
-                  onChange={(e) => setFormData({ ...formData, eventSetupTime: Number(e.target.value) })}
+                  type="time"
+                  value={formData.partyEventTime}
+                  onChange={(e) => setFormData({ ...formData, partyEventTime: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -426,9 +529,234 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
               </div>
             </div>
 
+            {/* Plan Type Toggle */}
+            <div className="border-t pt-6 space-y-4">
+              <h3 className="font-semibold text-lg">{tl("Ticket Plan Type", "Τύπος Πλάνου Εισιτηρίων")}</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPlanType("basic")}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    planType === "basic"
+                      ? "border-amber-500 bg-amber-50"
+                      : "border-border hover:border-amber-200"
+                  }`}
+                >
+                  <p className="font-semibold text-sm">{tl("Basic Plan", "Βασικό Πλάνο")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {tl("Single ticket type", "Ένας τύπος εισιτηρίου")}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlanType("custom")}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    planType === "custom"
+                      ? "border-purple-500 bg-purple-50"
+                      : "border-border hover:border-purple-200"
+                  }`}
+                >
+                  <p className="font-semibold text-sm">{tl("Custom Plan", "Προσαρμοσμένο Πλάνο")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {tl("Multiple tiers with perks", "Πολλαπλά επίπεδα με πλεονεκτήματα")}
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {/* Basic Plan */}
+            {planType === "basic" && (
+              <div className="border rounded-lg p-4 bg-amber-50 space-y-4">
+                <h4 className="font-semibold">{tl("Ticket Pricing", "Τιμολόγηση Εισιτηρίων")}</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{tl("Price per ticket (€)", "Τιμή ανά εισιτήριο (€)")}</Label>
+                    <Input
+                      type="number"
+                      value={formData.pricePerEvent}
+                      onChange={(e) => setFormData({ ...formData, pricePerEvent: Number(e.target.value) })}
+                      min="0"
+                      step="5"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{tl("Total event value (€)", "Συνολική αξία εκδήλωσης (€)")}</Label>
+                    <Input value={eventTotalValue.toFixed(2)} readOnly className="bg-background" />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {tl("All guests pay the same price", "Όλοι οι επισκέπτες πληρώνουν την ίδια τιμή")}
+                </p>
+              </div>
+            )}
+
+            {/* Custom Plan */}
+            {planType === "custom" && (
+              <div className="border rounded-lg p-4 bg-purple-50 space-y-4">
+                <h4 className="font-semibold">{tl("Custom Ticket Tiers", "Προσαρμοσμένα Επίπεδα Εισιτηρίων")}</h4>
+                
+                {/* Existing ticket types */}
+                {ticketTypes.length > 0 && (
+                  <div className="space-y-3">
+                    {ticketTypes.map((ticket, idx) => (
+                      <div key={ticket.id} className="bg-white p-4 rounded-lg border border-purple-200 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 space-y-2">
+                            <p className="font-semibold text-sm">{ticket.name}</p>
+                            <p className="text-sm text-muted-foreground">{ticket.description}</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {ticket.benefits.map((benefit) => (
+                                <span key={benefit} className="text-xs bg-purple-100 text-purple-900 px-2 py-1 rounded">
+                                  {benefit}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setTicketTypes(ticketTypes.filter((_, i) => i !== idx))}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex gap-3 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">{tl("Price", "Τιμή")}</p>
+                            <p className="font-semibold">€{ticket.price.toFixed(2)}</p>
+                          </div>
+                          {ticket.discount && ticket.discount > 0 && (
+                            <div>
+                              <p className="text-muted-foreground">
+                                {tl("Discount", "Έκπτωση")} ({ticket.discountType === "percentage" ? "%" : "€"})
+                              </p>
+                              <p className="font-semibold text-red-600">{ticket.discount}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Form to add new ticket type */}
+                <div className="bg-white p-4 rounded-lg border-2 border-dashed border-purple-200 space-y-3">
+                  <p className="font-semibold text-sm">{tl("Add New Ticket Tier", "Προσθήκη Νέου Επιπέδου Εισιτηρίου")}</p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">{tl("Tier name", "Όνομα επιπέδου")}</Label>
+                      <Input
+                        placeholder={tl("e.g., VIP, Premium", "π.χ., VIP, Premium")}
+                        value={newTicketType.name || ""}
+                        onChange={(e) => setNewTicketType({ ...newTicketType, name: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">{tl("Price (€)", "Τιμή (€)")}</Label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={newTicketType.price || 0}
+                        onChange={(e) => setNewTicketType({ ...newTicketType, price: Number(e.target.value) })}
+                        min="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">{tl("Description", "Περιγραφή")}</Label>
+                    <Input
+                      placeholder={tl("e.g., Includes premium drinks", "π.χ., Περιλαμβάνει ποτά premium")}
+                      value={newTicketType.description || ""}
+                      onChange={(e) => setNewTicketType({ ...newTicketType, description: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium">{tl("Included Benefits", "Περιλαμβανόμενα Πλεονεκτήματα")}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {COMMON_BENEFITS.map((benefit) => (
+                        <label key={benefit} className="flex items-center gap-2 text-xs cursor-pointer">
+                          <Checkbox
+                            checked={(newTicketType.benefits || []).includes(benefit)}
+                            onCheckedChange={() => {
+                              setNewTicketType({
+                                ...newTicketType,
+                                benefits: (newTicketType.benefits || []).includes(benefit)
+                                  ? (newTicketType.benefits || []).filter((b) => b !== benefit)
+                                  : [...(newTicketType.benefits || []), benefit],
+                              });
+                            }}
+                          />
+                          {benefit}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">{tl("Discount", "Έκπτωση")}</Label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={newTicketType.discount || 0}
+                        onChange={(e) => setNewTicketType({ ...newTicketType, discount: Number(e.target.value) })}
+                        min="0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">{tl("Discount type", "Τύπος έκπτωσης")}</Label>
+                      <Select
+                        value={newTicketType.discountType || "fixed"}
+                        onValueChange={(v) => setNewTicketType({ ...newTicketType, discountType: v as "fixed" | "percentage" })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fixed">{tl("Fixed (€)", "Σταθερά (€)")}</SelectItem>
+                          <SelectItem value="percentage">{tl("Percentage (%)", "Ποσοστό (%)")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => {
+                      if (newTicketType.name && newTicketType.price !== undefined && newTicketType.price > 0) {
+                        setTicketTypes([
+                          ...ticketTypes,
+                          {
+                            id: createLocalId(),
+                            name: newTicketType.name,
+                            price: Number(newTicketType.price),
+                            description: newTicketType.description || "",
+                            benefits: newTicketType.benefits || [],
+                            discount: newTicketType.discount || 0,
+                            discountType: newTicketType.discountType || "fixed",
+                          },
+                        ]);
+                        setNewTicketType({ name: "", price: 0, description: "", benefits: [], discount: 0, discountType: "fixed" });
+                      } else {
+                        toast({ title: tl("Fill all required fields", "Συμπληρώστε όλα τα απαιτούμενα πεδία"), variant: "destructive" });
+                      }
+                    }}
+                  >
+                    {tl("Add Tier", "Προσθήκη Επιπέδου")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Party Amenities */}
             <div className="space-y-3">
               <h4 className="font-semibold">{tl("Party Amenities", "Ανέσεις Πάρτι")}</h4>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {PARTY_AMENITIES.map((amenity) => (
                   <div key={amenity} className="flex items-center gap-2">
                     <Checkbox
@@ -448,26 +776,26 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
               </div>
             </div>
 
-            {/* Voucher promotion removed */}
-
-            <div className="flex items-center gap-2">
+            {/* Flash Sales */}
+            <div className="flex items-center gap-2 p-3 border rounded-lg">
               <Checkbox
                 id="flash-sale"
                 checked={formData.flashSaleEnabled}
                 onCheckedChange={(checked) => setFormData({ ...formData, flashSaleEnabled: checked as boolean })}
               />
               <Label htmlFor="flash-sale" className="cursor-pointer">
-                {tl("Enable flash sales", "Ενεργοποίηση flash sales")}
+                {tl("Enable flash sales (30% off for last-minute bookings)", "Ενεργοποίηση flash sales (30% έκπτωση για τελευταίες κρατήσεις)")}
               </Label>
             </div>
 
-            <div className="flex gap-2 justify-end">
+            {/* Navigation */}
+            <div className="flex gap-2 justify-end pt-4 border-t">
               <Button variant="outline" onClick={() => setCurrentStep(1)}>
                 {tl("Back", "Πίσω")}
               </Button>
               <Button
                 onClick={handleSavePartyBoat}
-                disabled={isSubmitting}
+                disabled={isSubmitting || (planType === "custom" && ticketTypes.length === 0)}
                 className="gap-2"
               >
                 {isSubmitting ? (

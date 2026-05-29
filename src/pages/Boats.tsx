@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSEO } from "@/hooks/useSEO";
 import { Link, useSearchParams } from "react-router-dom";
 import { Anchor, Filter, LayoutGrid, MapPin, Rows3, Sparkles, Users, Search } from "lucide-react";
@@ -15,12 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { getBoats } from "@/lib/boats";
 import type { Boat } from "@/lib/boats";
 import { sortBoatsByBookingsFirst } from "@/lib/boat-ranking";
 import { getBoatReviewStatsMap } from "@/lib/reviews";
+import { getBoatFavoriteCountsMap } from "@/lib/favorites-stats";
 import { toOwnerSlug } from "@/lib/owners";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { withRetry } from "@/lib/retry";
@@ -32,17 +34,23 @@ const featuredCollections = [
 ];
 
 const popularLocations = ["Thassos", "Halkidiki", "Mykonos", "Santorini"];
+type BoatSectorFilter = "all" | "rentals" | "parties" | "watersports";
+
+const isWatersportsBoat = (boat: Boat) => boat.type === "watersports";
+const isPartyBoat = (boat: Boat) => boat.partyReady === true;
+const isRentalBoat = (boat: Boat) => !isWatersportsBoat(boat) && !isPartyBoat(boat);
 
 const Boats = () => {
   const { tl } = useLanguage();
   const [searchParams] = useSearchParams();
   const [locationQuery, setLocationQuery] = useState(searchParams.get("location") ?? "");
   const [ownerQuery, setOwnerQuery] = useState(searchParams.get("owner") ?? "");
+  const sectorFromQuery = searchParams.get("sector");
 
   useSEO({
-    title: "Browse Boats for Rent in Greece | Nautiq",
+    title: "Browse Boats for Rent in Greece | Nautiplex",
     description: "Browse hundreds of verified boats for rent across Greek islands. Filter by location, type, price and capacity. Instant booking — no licenses needed for most boats.",
-    canonical: "https://nautiq.gr/boats",
+    canonical: "https://nautiplex.gr/boats",
     keywords: "boats for rent Greece, rent boat Mykonos, boat hire Santorini, motor yacht charter Greece, catamaran rental Greek islands",
   });
   const [minCapacity, setMinCapacity] = useState("any");
@@ -50,20 +58,31 @@ const Boats = () => {
   const [minLength, setMinLength] = useState("any");
   const [priceSort, setPriceSort] = useState<"recommended" | "price-low" | "price-high">("recommended");
   const [boatType, setBoatType] = useState("any");
+  const [sector, setSector] = useState<BoatSectorFilter>(
+    sectorFromQuery === "rentals" || sectorFromQuery === "parties" || sectorFromQuery === "watersports"
+      ? sectorFromQuery
+      : "all",
+  );
   const [minRating, setMinRating] = useState("any");
   const [reviewCounts, setReviewCounts] = useState<Record<string, number>>({});
+  const [favoriteCounts, setFavoriteCounts] = useState<Record<string, number>>({});
   const [allBoats, setAllBoats] = useState<Boat[]>([]);
   const [isBoatsLoading, setIsBoatsLoading] = useState(true);
   const [boatsError, setBoatsError] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<string[]>(["rentals", "watersports", "parties"]);
 
   useEffect(() => {
     const locationFromQuery = searchParams.get("location") ?? "";
     const ownerFromQuery = searchParams.get("owner") ?? "";
+    const sectorFromQuery = searchParams.get("sector") ?? "";
     setLocationQuery(locationFromQuery);
     setOwnerQuery(ownerFromQuery);
+    if (sectorFromQuery === "rentals" || sectorFromQuery === "parties" || sectorFromQuery === "watersports") {
+      setSector(sectorFromQuery);
+    }
   }, [searchParams]);
 
   const loadBoats = async () => {
@@ -87,7 +106,7 @@ const Boats = () => {
     const normalizedLocation = locationQuery.trim().toLowerCase();
     const normalizedOwner = ownerQuery.trim().toLowerCase();
 
-    const visibleBoats = allBoats.filter((boat) => {
+    return allBoats.filter((boat) => {
       const matchesLocation = normalizedLocation
         ? boat.location.toLowerCase().includes(normalizedLocation) ||
           boat.name.toLowerCase().includes(normalizedLocation)
@@ -114,21 +133,69 @@ const Boats = () => {
       const matchesRating =
         minRating === "any" ? true : boat.rating >= Number(minRating);
 
-      return matchesLocation && matchesOwner && matchesCapacity && matchesPrice && matchesLength && matchesBoatType && matchesRating;
-    });
+      const matchesSector = sector === "all" ? true :
+        sector === "rentals" ? isRentalBoat(boat) :
+        sector === "parties" ? isPartyBoat(boat) :
+        sector === "watersports" ? isWatersportsBoat(boat) :
+        true;
 
+      return matchesLocation && matchesOwner && matchesCapacity && matchesPrice && matchesLength && matchesBoatType && matchesRating && matchesSector;
+    });
+  }, [allBoats, locationQuery, ownerQuery, minCapacity, maxPrice, minLength, boatType, minRating, sector]);
+
+  const sortBoatsForList = useCallback((boats: Boat[]) => {
     if (priceSort === "price-low") {
-      return [...visibleBoats].sort((a, b) => a.pricePerDay - b.pricePerDay);
+      return [...boats].sort((a, b) => a.pricePerDay - b.pricePerDay);
     }
 
     if (priceSort === "price-high") {
-      return [...visibleBoats].sort((a, b) => b.pricePerDay - a.pricePerDay);
+      return [...boats].sort((a, b) => b.pricePerDay - a.pricePerDay);
     }
 
-    return sortBoatsByBookingsFirst(visibleBoats);
-  }, [allBoats, locationQuery, ownerQuery, minCapacity, maxPrice, minLength, priceSort, boatType, minRating]);
-  const filteredBoatIdsKey = filteredBoats.map((boat) => boat.id).join("|");
+    return sortBoatsByBookingsFirst(boats, favoriteCounts);
+  }, [favoriteCounts, priceSort]);
 
+  const rentalsBoats = useMemo(() => sortBoatsForList(filteredBoats.filter((boat) => isRentalBoat(boat))), [filteredBoats, sortBoatsForList]);
+  const watersportsBoats = useMemo(() => sortBoatsForList(filteredBoats.filter((boat) => isWatersportsBoat(boat))), [filteredBoats, sortBoatsForList]);
+  const partyBoats = useMemo(() => sortBoatsForList(filteredBoats.filter((boat) => isPartyBoat(boat))), [filteredBoats, sortBoatsForList]);
+
+  const boatSections = useMemo(() => {
+    const sections = [
+      {
+        id: "rentals",
+        title: tl("All Rental Boats", "Όλα τα Σκάφη Ενοικίασης"),
+        subtitle: tl("Browse all available rental boats", "Δες όλα τα διαθέσιμα σκάφη ενοικίασης"),
+        boats: rentalsBoats,
+      },
+      {
+        id: "watersports",
+        title: tl("Watersports Rentals", "Ενοικιάσεις Watersports"),
+        subtitle: tl("Jetski, activities and sea action", "Jetski, δραστηριότητες και θαλάσσια δράση"),
+        boats: watersportsBoats,
+      },
+      {
+        id: "parties",
+        title: tl("Boat Parties", "Πάρτι σε Σκάφη"),
+        subtitle: tl("Party-ready boats and event experiences", "Σκάφη για πάρτι και εμπειρίες εκδηλώσεων"),
+        boats: partyBoats,
+      },
+    ];
+
+    if (sector === "all") {
+      return sections;
+    }
+
+    return sections.filter((section) => section.id === sector);
+  }, [sector, rentalsBoats, watersportsBoats, partyBoats, tl]);
+
+  useEffect(() => {
+    if (sector === "all") {
+      setOpenSections(["rentals", "watersports", "parties"]);
+      return;
+    }
+
+    setOpenSections([sector]);
+  }, [sector]);
   const activeFiltersCount = [
     locationQuery.trim() ? 1 : 0,
     ownerQuery.trim() ? 1 : 0,
@@ -137,6 +204,7 @@ const Boats = () => {
     minLength !== "any" ? 1 : 0,
     boatType !== "any" ? 1 : 0,
     minRating !== "any" ? 1 : 0,
+    sector !== "all" ? 1 : 0,
   ].reduce((total, value) => total + value, 0);
 
   const resetFilters = () => {
@@ -148,6 +216,7 @@ const Boats = () => {
     setBoatType("any");
     setMinRating("any");
     setPriceSort("recommended");
+    setSector("all");
   };
 
   const applyCollection = (collection: typeof featuredCollections[number]) => {
@@ -162,16 +231,22 @@ const Boats = () => {
 
     const loadReviewCounts = async () => {
       try {
-        const statsMap = await getBoatReviewStatsMap(filteredBoats.map((boat) => boat.id));
+        const boatIds = filteredBoats.map((boat) => boat.id);
+        const [statsMap, favoritesMap] = await Promise.all([
+          getBoatReviewStatsMap(boatIds),
+          getBoatFavoriteCountsMap(boatIds),
+        ]);
         if (isActive) {
           const counts = Object.fromEntries(
             Object.entries(statsMap).map(([boatId, stats]) => [boatId, stats.total]),
           );
           setReviewCounts(counts);
+          setFavoriteCounts(favoritesMap);
         }
       } catch {
         if (isActive) {
           setReviewCounts({});
+          setFavoriteCounts({});
         }
       }
     };
@@ -181,7 +256,7 @@ const Boats = () => {
     return () => {
       isActive = false;
     };
-  }, [filteredBoatIdsKey]);
+  }, [filteredBoats]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -336,6 +411,27 @@ const Boats = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <p className="text-sm text-muted-foreground">{tl("Sector", "Κατηγορία")}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { value: "all", label: tl("All", "Όλα") },
+                            { value: "rentals", label: tl("Rentals", "Ενοικιάσεις") },
+                            { value: "watersports", label: tl("Watersports", "Watersports") },
+                            { value: "parties", label: tl("Parties", "Πάρτι") },
+                          ].map((option) => (
+                            <Button
+                              key={option.value}
+                              type="button"
+                              variant={sector === option.value ? "default" : "outline"}
+                              className="h-9"
+                              onClick={() => setSector(option.value as BoatSectorFilter)}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="space-y-2">
                         <p className="text-sm text-muted-foreground">{tl("Boat Type", "Τύπος Σκάφους")}</p>
                         <Select value={boatType} onValueChange={setBoatType}>
@@ -446,25 +542,46 @@ const Boats = () => {
                 </CardContent>
               </Card>
             ) : filteredBoats.length > 0 ? (
-              <div className={`grid gap-5 md:gap-6 ${
-                viewMode === "grid"
-                  ? "grid-cols-2 md:grid-cols-2 xl:grid-cols-3"
-                  : "grid-cols-1 md:grid-cols-2"
-              }`}>
-                {filteredBoats.map((boat, index) => (
-                  <div key={boat.name} className="space-y-2">
-                    <BoatCard {...boat} index={index} reviewCount={reviewCounts[boat.id] ?? 0} />
-                    {boat.owner.name && (
-                      <Link
-                        to={`/owners/${toOwnerSlug(boat.owner.name)}`}
-                        className="text-xs text-aegean hover:text-turquoise font-medium"
-                      >
-                        View {boat.owner.name}'s fleet →
-                      </Link>
-                    )}
-                  </div>
+              <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-6">
+                {boatSections.map((section) => (
+                  section.boats.length > 0 ? (
+                    <AccordionItem key={section.id} value={section.id} className="border-b border-border/60">
+                      <AccordionTrigger className="hover:no-underline py-4">
+                        <div className="space-y-1 text-left">
+                          <h2 className="text-xl font-semibold text-foreground">{section.title}</h2>
+                          <p className="text-sm text-muted-foreground">{section.subtitle} • {section.boats.length}</p>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-2">
+                        <div className={`grid gap-5 md:gap-6 ${
+                          viewMode === "grid"
+                            ? "grid-cols-2 md:grid-cols-2 xl:grid-cols-3"
+                            : "grid-cols-1 md:grid-cols-2"
+                        }`}>
+                          {section.boats.map((boat, index) => (
+                            <div key={`${section.id}-${boat.id}`} className="space-y-2">
+                              <BoatCard
+                                {...boat}
+                                index={index}
+                                reviewCount={reviewCounts[boat.id] ?? 0}
+                                favoriteCount={favoriteCounts[boat.id] ?? 0}
+                              />
+                              {boat.owner.name && (
+                                <Link
+                                  to={`/owners/${toOwnerSlug(boat.owner.name)}`}
+                                  className="text-xs text-aegean hover:text-turquoise font-medium"
+                                >
+                                  View {boat.owner.name}'s fleet →
+                                </Link>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ) : null
                 ))}
-              </div>
+              </Accordion>
             ) : (
               <Card>
                 <CardContent className="py-10 text-center space-y-2">
@@ -498,3 +615,4 @@ const Boats = () => {
 };
 
 export default Boats;
+

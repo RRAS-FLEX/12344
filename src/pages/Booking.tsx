@@ -64,6 +64,11 @@ type BookingRealtimeRow = {
 type OilPriceSettingsRow = {
   value?: number | string | null;
 };
+type PartyInventoryRow = {
+  guests?: number | null;
+  status?: string | null;
+  package_label?: string | null;
+};
 
 const Booking = () => {
   const [searchParams] = useSearchParams();
@@ -127,7 +132,7 @@ const Booking = () => {
   const dailyRate = boat?.pricePerDay ?? 450;
   const [selectedPackageId, setSelectedPackageId] = useState<string | null>(null);
   const [fuelLitres, setFuelLitres] = useState([40]);
-  const [guestCount, setGuestCount] = useState(4);
+  const [guestCount, setGuestCount] = useState(1);
   const [includeSkipper, setIncludeSkipper] = useState(true);
   const [includeFlexibleCancellation, setIncludeFlexibleCancellation] = useState(false);
   const [ownerUpgrades, setOwnerUpgrades] = useState<Array<{ id: string; label: string; price: number }>>([]);
@@ -147,13 +152,16 @@ const Booking = () => {
   const [bookingsRealtimeTick, setBookingsRealtimeTick] = useState(0);
   const [calendarRealtimeTick, setCalendarRealtimeTick] = useState(0);
   const [liveAvailabilityNotice, setLiveAvailabilityNotice] = useState(false);
+  const [partyTicketsSold, setPartyTicketsSold] = useState(0);
+  const [isLoadingPartyTickets, setIsLoadingPartyTickets] = useState(false);
   const paymentMethod: PaymentMethod = "stripe";
   const [paymentPlan, setPaymentPlan] = useState<"deposit" | "full" | null>(null);
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1);
   const [autoUnavailableDates, setAutoUnavailableDates] = useState<Date[]>([]);
   const [oilPricePerLitre, setOilPricePerLitre] = useState(1.95);
-  const partyStartTime = "18:00";
+  const partyStartTime = boat?.partyEventTime?.trim() || "";
   const partyDurationHours = 8;
+  const [selectedPartyTier, setSelectedPartyTier] = useState<string | null>(null);
 
   useEffect(() => {
     if (boat?.partyReady) {
@@ -162,7 +170,7 @@ const Booking = () => {
       setPaymentPlan("full");
       setDepartureTime(partyStartTime);
     }
-  }, [boat?.partyReady]);
+  }, [boat?.partyReady, partyStartTime]);
 
   useEffect(() => {
     if (sessionUser?.name && !customerName) {
@@ -210,6 +218,8 @@ const Booking = () => {
       setIncludeSkipper(true);
     }
   }, [boat?.skipperRequired]);
+
+  const isBoatPending = isBoatLoading && !boat;
 
   useEffect(() => {
     const loadBoatPackages = async () => {
@@ -285,8 +295,12 @@ const Booking = () => {
   const ticketPricePerPerson = boat
     ? (boat.ticketPricePerPerson > 0 ? boat.ticketPricePerPerson : boat.capacity > 0 ? boat.pricePerDay / boat.capacity : 0)
     : 0;
-  const guestLimit = isPartyBooking ? Math.max(1, ticketMaxPeople) : (boat?.capacity ?? 12);
-  const ticketQuantity = isPartyBooking ? Math.min(Math.max(guestCount, 1), guestLimit) : guestCount;
+  const partyInventoryDateString = selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
+  const ticketsRemaining = isPartyBooking ? Math.max(ticketMaxPeople - partyTicketsSold, 0) : 0;
+  const guestLimit = isPartyBooking ? ticketsRemaining : (boat?.capacity ?? 12);
+  const ticketQuantity = isPartyBooking
+    ? (guestLimit > 0 ? Math.min(Math.max(guestCount, 1), guestLimit) : 0)
+    : guestCount;
   const ticketSubtotal = isPartyBooking ? ticketPricePerPerson * ticketQuantity : 0;
   const formatEuroAmount = (value: number) => `€${value.toFixed(value % 1 === 0 ? 0 : 2)}`;
   const bookingDurationHours = isPartyBooking ? partyDurationHours : selectedPackage.hours;
@@ -354,11 +368,19 @@ const Booking = () => {
   const ownerPayout = Math.max(estimatedTotal - platformCommission, 0);
   const depositAmount = pricing.depositAmount;
   const amountDueNow = pricing.amountDueNow;
-  const canContinueStep1 = isPartyBooking ? Boolean(selectedDate) : Boolean(selectedDate && availableDepartureTimes.includes(departureTime));
+  const bookingDateString = isPartyBooking
+    ? (boat?.partyEventDate?.trim() || "")
+    : (selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"));
+  const resolvedPartyEventDate = boat?.partyEventDate?.trim() || "";
+  const resolvedPartyEventTime = boat?.partyEventTime?.trim() || "";
+  // Allow party bookings to proceed without selecting a calendar date (owner provides event date)
+  const isPartySoldOut = isPartyBooking && ticketMaxPeople > 0 && ticketsRemaining <= 0;
+  const canContinueStep1 = isPartyBooking ? !isPartySoldOut : Boolean(selectedDate && availableDepartureTimes.includes(departureTime));
   const canContinueStep2 = Boolean(customerName.trim() && customerEmail.trim());
   const canContinueStep3 = Boolean(paymentPlan);
-  const bookingStepCount = isPartyBooking ? 3 : 4;
-  const finalBookingStep = isPartyBooking ? 3 : 4;
+  // For party bookings, collapse flow into a single step for a simpler UX.
+  const bookingStepCount = isPartyBooking ? 1 : 4;
+  const finalBookingStep = isPartyBooking ? 1 : 4;
 
   const selectedExtraLabels = useMemo(
     () => ownerUpgrades.filter((item) => selectedExtras.includes(item.id)).map((item) => item.label),
@@ -413,6 +435,48 @@ const Booking = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!boat?.id || !isPartyBooking) {
+      setPartyTicketsSold(0);
+      setIsLoadingPartyTickets(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPartyTicketInventory = async () => {
+      setIsLoadingPartyTickets(true);
+
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("guests, status, package_label")
+        .eq("boat_id", boat.id)
+        .eq("start_date", partyInventoryDateString)
+        .in("status", ["pending", "confirmed"]);
+
+      if (cancelled) return;
+
+      if (error || !Array.isArray(data)) {
+        setPartyTicketsSold(0);
+        setIsLoadingPartyTickets(false);
+        return;
+      }
+
+      const sold = (data as PartyInventoryRow[])
+        .filter((row) => String(row.package_label ?? "") === "Party tickets")
+        .reduce((total, row) => total + Math.max(0, Math.floor(Number(row.guests ?? 0))), 0);
+
+      setPartyTicketsSold(sold);
+      setIsLoadingPartyTickets(false);
+    };
+
+    loadPartyTicketInventory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boat?.id, isPartyBooking, bookingsRealtimeTick, partyInventoryDateString]);
 
   useEffect(() => {
     if (!boat?.id) {
@@ -476,15 +540,21 @@ const Booking = () => {
 
   useEffect(() => {
     if (isPartyBooking) {
-      if (!boat?.id || !selectedDate) {
+      if (!boat?.id) {
         setAvailableDepartureTimes([]);
         setDepartureRecommendations([]);
         return;
       }
 
-      setAvailableDepartureTimes([partyStartTime]);
+      if (!resolvedPartyEventDate || !resolvedPartyEventTime) {
+        setAvailableDepartureTimes([]);
+        setDepartureRecommendations([]);
+        return;
+      }
+
+      setAvailableDepartureTimes([resolvedPartyEventTime]);
       setDepartureRecommendations([]);
-      setDepartureTime(partyStartTime);
+      setDepartureTime(resolvedPartyEventTime);
       return;
     }
 
@@ -662,19 +732,49 @@ const Booking = () => {
       return;
     }
 
-    if (!selectedDate) {
+    if (!selectedDate && !isPartyBooking) {
       toast({
         title: tl("Select a date", "Επίλεξε ημερομηνία"),
-        description: tl("Choose an available date from the calendar before confirming.", "Επίλεξε διαθέσιμη ημερομηνία από το ημερολόγιο πριν την επιβεβαίωση."),
+        description: tl("Choose an available date from the calendar before confirming.", "Επίλεξε διαθέσιμη ημεμηνία από το ημερολόγιο πριν την επιβεβαίωση."),
         variant: "destructive",
       });
       return;
     }
 
-    if (isPartyBooking ? departureTime !== partyStartTime : availableDepartureTimes.length === 0 || !availableDepartureTimes.includes(departureTime)) {
+    if (isPartyBooking ? departureTime !== resolvedPartyEventTime : availableDepartureTimes.length === 0 || !availableDepartureTimes.includes(departureTime)) {
+      if (isPartyBooking && (!resolvedPartyEventDate || !resolvedPartyEventTime)) {
+        toast({
+          title: tl("Party date missing", "Λείπει η ημερομηνία πάρτι"),
+          description: tl("The owner needs to set the original party date and time before this booking can continue.", "Ο ιδιοκτήτης πρέπει να έχει ορίσει την αρχική ημερομηνία και ώρα πάρτι πριν συνεχίσει αυτή η κράτηση."),
+          variant: "destructive",
+        });
+        return;
+      }
+
       navigate(
-        `/booking-closed?boat=${encodeURIComponent(boat.name)}&date=${encodeURIComponent(selectedDate.toISOString().slice(0, 10))}&reason=${encodeURIComponent("slot-unavailable")}`,
+        `/booking-closed?boat=${encodeURIComponent(boat.name)}&date=${encodeURIComponent(bookingDateString)}&reason=${encodeURIComponent("slot-unavailable")}`,
       );
+      return;
+    }
+
+    if (isPartyBooking && ticketMaxPeople > 0 && ticketsRemaining <= 0) {
+      toast({
+        title: tl("Sold out", "Εξαντλήθηκε"),
+        description: tl("No party tickets are left for this event.", "Δεν έχουν απομείνει εισιτήρια για αυτή την εκδήλωση."),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isPartyBooking && ticketQuantity > ticketsRemaining) {
+      toast({
+        title: tl("Not enough tickets left", "Δεν υπάρχουν αρκετά εισιτήρια"),
+        description: tl(
+          `Only ${ticketsRemaining} ticket${ticketsRemaining === 1 ? "" : "s"} left for this event.`,
+          `Απομένουν μόνο ${ticketsRemaining} εισιτήριο${ticketsRemaining === 1 ? "" : "α"} για αυτή την εκδήλωση.`,
+        ),
+        variant: "destructive",
+      });
       return;
     }
 
@@ -687,7 +787,7 @@ const Booking = () => {
       return;
     }
 
-    if (!paymentPlan) {
+    if (!paymentPlan && !isPartyBooking) {
       toast({
         title: tl("Select payment plan", "Επίλεξε πλάνο πληρωμής"),
         description: tl("Choose deposit or full payment before confirming.", "Επίλεξε προκαταβολή ή πλήρη πληρωμή πριν την επιβεβαίωση."),
@@ -708,27 +808,40 @@ const Booking = () => {
             "Content-Type": "application/json",
             ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
           },
+
           body: JSON.stringify({
             boatId: boat.id,
             boatName: boat.name,
             customerEmail: customerEmail.trim().toLowerCase(),
             customerId: sessionUser?.id,
-            bookingDate: format(selectedDate, "yyyy-MM-dd"),
+            bookingDate: bookingDateString,
             departureTime,
             packageHours: bookingDurationHours,
             guests: guestCount,
+            isPartyBooking,
             preDiscountTotal,
             totalPrice: estimatedTotal,
             amountDueNow,
-            paymentPlan,
+            paymentPlan: paymentPlan ?? "full",
             depositAmount,
             successUrl: `${window.location.origin}/booking-confirmed`,
             cancelUrl: window.location.href,
+            ...(isPartyBooking ? {
+              partyEventDate: resolvedPartyEventDate || undefined,
+              partyEventTime: resolvedPartyEventTime || undefined,
+            } : {}),
+            ...(isPartyBooking && selectedPartyTier && boat.partyTiers
+              ? {
+                  partyTierSelected: selectedPartyTier,
+                  partyTierPrice:
+                    boat.partyTiers.find((tier) => tier.name === selectedPartyTier)?.price ?? 0,
+                }
+              : {}),
           }),
         });
 
         const checkoutRaw = await checkoutResponse.text();
-        let checkoutPayload: { sessionId?: string; checkoutUrl?: string; error?: string } = {};
+        let checkoutPayload: { sessionId?: string; checkoutUrl?: string; error?: string; details?: string } = {};
         if (checkoutRaw) {
           try {
             checkoutPayload = JSON.parse(checkoutRaw);
@@ -737,7 +850,9 @@ const Booking = () => {
           }
         }
         if (!checkoutResponse.ok) {
-          throw new Error(checkoutPayload?.error ?? "Failed to create checkout session");
+          const errorMsg = checkoutPayload?.error || "Failed to create checkout session";
+          const details = checkoutPayload?.details ? ` (${checkoutPayload.details})` : "";
+          throw new Error(errorMsg + details);
         }
 
         const checkoutUrl = String(checkoutPayload.checkoutUrl ?? "").trim();
@@ -783,7 +898,7 @@ const Booking = () => {
         packageLabel: isPartyBooking ? "Party tickets" : selectedPackage.name,
         packageHours: bookingDurationHours,
         guests: ticketQuantity,
-        date: format(selectedDate, "yyyy-MM-dd"),
+        date: bookingDateString,
         departureTime,
         departureMarina: boat.departureMarina,
         totalPrice: estimatedTotal,
@@ -833,7 +948,7 @@ const Booking = () => {
     });
 
     navigate(
-      `/booking-confirmed?bookingId=${encodeURIComponent(result.booking.id)}&boat=${encodeURIComponent(result.booking.boatName)}&date=${encodeURIComponent(result.booking.date)}&departure=${encodeURIComponent(result.booking.departureTime)}&amount=${encodeURIComponent(String(amountDueNow))}&emailQueued=${encodeURIComponent(String(Boolean(result.customerEmail)))}&ownerNotified=${encodeURIComponent("true")}&partyTicketCode=${encodeURIComponent(String(result.booking.partyTicketCode ?? ""))}&partyTicketCount=${encodeURIComponent(String(result.booking.partyTicketCount ?? 0))}&partyTicketStatus=${encodeURIComponent(String(result.booking.partyTicketStatus ?? ""))}&partyTicketPrice=${encodeURIComponent(String(ticketPricePerPerson))}&partyTicketQuantity=${encodeURIComponent(String(ticketQuantity))}`,
+      `/booking-confirmed?bookingId=${encodeURIComponent(result.booking.id)}&boat=${encodeURIComponent(result.booking.boatName)}&date=${encodeURIComponent(result.booking.date)}&departure=${encodeURIComponent(result.booking.departureTime)}&amount=${encodeURIComponent(String(amountDueNow))}&emailQueued=${encodeURIComponent(String(Boolean(result.customerEmail)))}&ownerNotified=${encodeURIComponent("true")}&bookingType=${encodeURIComponent(isPartyBooking ? "party" : "rental")}&partyEventDate=${encodeURIComponent(String(resolvedPartyEventDate))}&partyEventTime=${encodeURIComponent(String(resolvedPartyEventTime))}&partyTicketCode=${encodeURIComponent(String(result.booking.partyTicketCode ?? ""))}&partyTicketCount=${encodeURIComponent(String(result.booking.partyTicketCount ?? 0))}&partyTicketStatus=${encodeURIComponent(String(result.booking.partyTicketStatus ?? ""))}&partyTicketPrice=${encodeURIComponent(String(ticketPricePerPerson))}&partyTicketQuantity=${encodeURIComponent(String(ticketQuantity))}`,
     );
   };
 
@@ -849,7 +964,41 @@ const Booking = () => {
     }
   };
 
-  return (
+  const loadingState = isBoatPending ? (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+      <main className="pt-20 pb-12">
+        <div className="container mx-auto px-4 max-w-5xl space-y-6">
+          <Card className="overflow-hidden shadow-card-hover">
+            <CardContent className="p-6 md:p-8 space-y-4">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-10 w-3/4 max-w-xl" />
+              <Skeleton className="h-5 w-full max-w-2xl" />
+            </CardContent>
+          </Card>
+          <div className="grid gap-6 lg:grid-cols-[1.35fr_0.9fr]">
+            <Card className="shadow-card-hover">
+              <CardContent className="p-6 space-y-4">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-40 w-full" />
+                <Skeleton className="h-40 w-full" />
+              </CardContent>
+            </Card>
+            <Card className="shadow-card-hover">
+              <CardContent className="p-6 space-y-4">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  ) : null;
+
+  return loadingState ?? (
     <div className="min-h-screen bg-background">
       <Navbar />
 
@@ -887,7 +1036,7 @@ const Booking = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className={`grid gap-2 ${bookingStepCount === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
+                <div className={`grid gap-2 ${bookingStepCount === 1 ? "grid-cols-1" : "grid-cols-4"}`}>
                   {Array.from({ length: bookingStepCount }, (_, index) => index + 1).map((step) => (
                     <div key={step} className="space-y-1">
                       <div className={`h-1 rounded-full ${step <= bookingStep ? "bg-aegean" : "bg-muted"}`} />
@@ -924,6 +1073,13 @@ const Booking = () => {
                           <p className="font-semibold text-foreground">{ticketPricePerPerson > 0 ? formatEuroAmount(ticketSubtotal) : "Contact for price"}</p>
                         </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        {isLoadingPartyTickets
+                          ? "Checking remaining tickets..."
+                          : ticketMaxPeople > 0
+                            ? `${ticketsRemaining} ticket${ticketsRemaining === 1 ? "" : "s"} left before your selection${ticketQuantity > 0 ? `, ${Math.max(ticketsRemaining - ticketQuantity, 0)} left after you buy ${ticketQuantity}` : ""}.`
+                            : "Ticket capacity is on request."}
+                      </p>
                     </div>
                   ) : null}
                   <div className="space-y-3">
@@ -935,12 +1091,19 @@ const Booking = () => {
                             <p className="text-sm font-medium text-foreground">Party tickets</p>
                             <p className="text-xs text-muted-foreground">Add more tickets to grow the guest list.</p>
                           </div>
-                          <Badge variant="outline">{ticketMaxPeople > 0 ? `Max ${ticketMaxPeople}` : "Ticketed"}</Badge>
+                          <Badge variant="outline">
+                            {isLoadingPartyTickets
+                              ? "Checking"
+                              : ticketMaxPeople > 0
+                                ? `${ticketsRemaining} left`
+                                : "Ticketed"}
+                          </Badge>
                         </div>
                         <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3">
                           <button
                             type="button"
                             onClick={() => setGuestCount((current) => Math.max(1, current - 1))}
+                            disabled={guestLimit <= 0 || ticketQuantity <= 1}
                             className="h-10 w-10 rounded-xl border border-border hover:border-aegean flex items-center justify-center text-base font-semibold transition-colors"
                             aria-label="Remove ticket"
                           >
@@ -952,7 +1115,8 @@ const Booking = () => {
                           </div>
                           <button
                             type="button"
-                            onClick={() => setGuestCount((current) => Math.min(guestLimit, current + 1))}
+                            onClick={() => setGuestCount((current) => Math.min(Math.max(guestLimit, 0), current + 1))}
+                            disabled={guestLimit <= 0 || ticketQuantity >= guestLimit}
                             className="h-10 w-10 rounded-xl border border-border hover:border-aegean flex items-center justify-center text-base font-semibold transition-colors"
                             aria-label="Add ticket"
                           >
@@ -963,6 +1127,35 @@ const Booking = () => {
                           <span className="text-muted-foreground">{ticketPricePerPerson > 0 ? `€${ticketPricePerPerson.toFixed(ticketPricePerPerson % 1 === 0 ? 0 : 2)} × ${ticketQuantity}` : "Ticket total"}</span>
                           <span className="font-semibold text-foreground">{ticketPricePerPerson > 0 ? formatEuroAmount(ticketSubtotal) : "Contact for price"}</span>
                         </div>
+
+                        {boat?.partyTiers && Array.isArray(boat.partyTiers) && boat.partyTiers.length > 0 ? (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-foreground">Party tier (optional)</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {boat.partyTiers.map((tier) => (
+                                <button
+                                  key={tier.name}
+                                  type="button"
+                                  onClick={() => setSelectedPartyTier(selectedPartyTier === tier.name ? null : tier.name)}
+                                  className={`rounded-lg border p-3 text-sm font-medium transition-all ${
+                                    selectedPartyTier === tier.name
+                                      ? "border-amber-500 bg-amber-100 text-amber-900"
+                                      : "border-amber-200 bg-amber-50 text-foreground hover:border-amber-400"
+                                  }`}
+                                >
+                                  <div>{tier.name}</div>
+                                  <div className="text-xs opacity-75">€{tier.price.toFixed(tier.price % 1 === 0 ? 0 : 2)}</div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <p className="text-xs text-muted-foreground">
+                          {ticketMaxPeople > 0
+                            ? `After this selection: ${Math.max(ticketsRemaining - ticketQuantity, 0)} ticket${Math.max(ticketsRemaining - ticketQuantity, 0) === 1 ? "" : "s"} left.`
+                            : "Ticket inventory is managed by the owner."}
+                        </p>
                       </div>
                     ) : boatPackages.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1001,120 +1194,138 @@ const Booking = () => {
                 <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-5">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Sector 2: Party date &amp; guest list" : "Sector 2: Trip date &amp; departure"}</p>
-                      <p className="text-xs text-muted-foreground">{isPartyBooking ? `Pick the event day. Boarding opens at ${partyStartTime} and guests can arrive after that time.` : "Pick your trip day, a free departure time, and how many guests join."}</p>
+                      <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Sector 2: Party date &amp; boarding time" : "Sector 2: Trip date &amp; departure"}</p>
+                      <p className="text-xs text-muted-foreground">{isPartyBooking ? (resolvedPartyEventDate && resolvedPartyEventTime ? `Event date: ${resolvedPartyEventDate}. Boarding opens at ${resolvedPartyEventTime} and guests can arrive after that time.` : "The owner still needs to set the original party date and boarding time.") : "Pick your trip day, a free departure time, and how many guests join."}</p>
                     </div>
                     <Badge variant="outline">Schedule</Badge>
                   </div>
 
-                  {/* Quick date shortcuts */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-xs text-muted-foreground shrink-0">Jump to a good option:</p>
-                    {([
-                      { label: "Next available", date: nextAvailableDate },
-                      {
-                        label: "This weekend",
-                        date: (() => {
-                          const today = startOfDay(new Date());
-                          for (let offset = 1; offset <= 14; offset++) {
-                            const d = addDays(today, offset);
-                            if (isWeekend(d) && !unavailableDates.some((u) => isSameDay(u, d))) return d;
-                          }
-                          return undefined;
-                        })(),
-                      },
-                      {
-                        label: "+7 days",
-                        date: (() => {
-                          const d = addDays(startOfDay(new Date()), 7);
-                          return unavailableDates.some((u) => isSameDay(u, d)) ? undefined : d;
-                        })(),
-                      },
-                      { label: "+14 days", date: addDays(startOfDay(new Date()), 14) },
-                    ] as Array<{ label: string; date: Date | undefined }>).map(({ label, date }) => (
-                      <button
-                        key={label}
-                        type="button"
-                        disabled={!date}
-                        onClick={() => {
-                          if (date) {
-                            setSelectedDate(date);
-                            setHasDateIntent(true);
-                          }
-                        }}
-                        className="text-xs px-3 py-1.5 rounded-full border border-border hover:border-aegean hover:text-aegean disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {label}
-                        {date ? <span className="ml-1 opacity-60">({format(date, "d MMM")})</span> : null}
-                      </button>
-                    ))}
-                  </div>
-
                   <div className="grid grid-cols-1 xl:grid-cols-[1fr_220px] gap-5 items-start">
-                    {/* Calendar with visual unavailability */}
-                    <div className="rounded-3xl border border-border p-3 md:p-4 bg-muted/20 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="space-y-0.5">
-                          <p className="text-sm font-medium text-foreground">Pick date</p>
-                          <p className="text-xs text-muted-foreground">
-                            {nextAvailableDate ? `Soonest available: ${format(nextAvailableDate, "d MMM")}` : "Chat with the owner if your date looks blocked."}
-                          </p>
-                        </div>
-                        <p className="hidden md:block text-[11px] text-muted-foreground text-right">
-                          Grey dates are in the past, red are already booked.
-                        </p>
-                      </div>
-                      <div className="relative">
-                        {isCalendarLoading && (
-                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 rounded-2xl">
-                            <div className="h-8 w-8 border-2 border-aegean border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        )}
-                        <div className="overflow-x-auto pb-1">
-                          <div className="min-w-[340px] w-full flex justify-center">
-                            <Calendar
-                              mode="single"
-                              selected={selectedDate}
-                              onSelect={(date) => {
-                                setSelectedDate(date);
+                    { !isPartyBooking ? (
+                      <>
+                        {/* Quick date shortcuts */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs text-muted-foreground shrink-0">Jump to a good option:</p>
+                          {([
+                            { label: "Next available", date: nextAvailableDate },
+                            {
+                              label: "This weekend",
+                              date: (() => {
+                                const today = startOfDay(new Date());
+                                for (let offset = 1; offset <= 14; offset++) {
+                                  const d = addDays(today, offset);
+                                  if (isWeekend(d) && !unavailableDates.some((u) => isSameDay(u, d))) return d;
+                                }
+                                return undefined;
+                              })(),
+                            },
+                            {
+                              label: "+7 days",
+                              date: (() => {
+                                const d = addDays(startOfDay(new Date()), 7);
+                                return unavailableDates.some((u) => isSameDay(u, d)) ? undefined : d;
+                              })(),
+                            },
+                            { label: "+14 days", date: addDays(startOfDay(new Date()), 14) },
+                          ] as Array<{ label: string; date: Date | undefined }>).map(({ label, date }) => (
+                            <button
+                              key={label}
+                              type="button"
+                              disabled={!date}
+                              onClick={() => {
                                 if (date) {
+                                  setSelectedDate(date);
                                   setHasDateIntent(true);
                                 }
                               }}
-                              disabled={(date) =>
-                                date < startOfDay(new Date()) ||
-                                unavailableDates.some((blocked) => isSameDay(blocked, date))
-                              }
-                              modifiers={{ unavailable: unavailableDates }}
-                              modifiersClassNames={{
-                                unavailable:
-                                  "!bg-destructive/10 !text-destructive !border-destructive/40 line-through !opacity-90 cursor-not-allowed",
-                              }}
-                              className="rounded-2xl border border-border bg-background w-[340px] max-w-full"
-                            />
+                              className="text-xs px-3 py-1.5 rounded-full border border-border hover:border-aegean hover:text-aegean disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {label}
+                              {date ? <span className="ml-1 opacity-60">({format(date, "d MMM")})</span> : null}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Calendar with visual unavailability */}
+                        <div className="rounded-3xl border border-border p-3 md:p-4 bg-muted/20 space-y-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <p className="text-sm font-medium text-foreground">Pick date</p>
+                              <p className="text-xs text-muted-foreground">
+                                {nextAvailableDate ? `Soonest available: ${format(nextAvailableDate, "d MMM")}` : "Chat with the owner if your date looks blocked."}
+                              </p>
+                            </div>
+                            <p className="hidden md:block text-[11px] text-muted-foreground text-right">
+                              Grey dates are in the past, red are already booked.
+                            </p>
+                          </div>
+                          <div className="relative">
+                            {isCalendarLoading && (
+                              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40 rounded-2xl">
+                                <div className="h-8 w-8 border-2 border-aegean border-t-transparent rounded-full animate-spin" />
+                              </div>
+                            )}
+                            <div className="overflow-x-auto pb-1">
+                              <div className="min-w-[340px] w-full flex justify-center">
+                                <Calendar
+                                  mode="single"
+                                  selected={selectedDate}
+                                  onSelect={(date) => {
+                                    setSelectedDate(date);
+                                    if (date) {
+                                      setHasDateIntent(true);
+                                    }
+                                  }}
+                                  disabled={(date) =>
+                                    date < startOfDay(new Date()) ||
+                                    unavailableDates.some((blocked) => isSameDay(blocked, date))
+                                  }
+                                  modifiers={{ unavailable: unavailableDates }}
+                                  modifiersClassNames={{
+                                    unavailable:
+                                      "!bg-destructive/10 !text-destructive !border-destructive/40 line-through !opacity-90 cursor-not-allowed",
+                                  }}
+                                  className="rounded-2xl border border-border bg-background w-[340px] max-w-full"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          {/* Legend */}
+                          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 text-xs text-muted-foreground border-t border-border">
+                            <span className="flex items-center gap-1.5 pt-2">
+                              <span className="inline-block h-3 w-3 rounded-full bg-primary" />
+                              Selected
+                            </span>
+                            <span className="flex items-center gap-1.5 pt-2">
+                              <span className="inline-block h-3 w-3 rounded-full bg-accent border border-border" />
+                              Today
+                            </span>
+                            <span className="flex items-center gap-1.5 pt-2 text-destructive/80">
+                              <span className="inline-block h-3 w-3 rounded-full bg-destructive/15 border border-destructive/30" />
+                              {boat ? `${(boat.owner.name || "Owner").split(' ')[0]} unavailable` : "Owner unavailable"}
+                            </span>
+                            <span className="flex items-center gap-1.5 pt-2 opacity-50">
+                              <span className="inline-block h-3 w-3 rounded-full bg-muted border border-border" />
+                              Past dates
+                            </span>
                           </div>
                         </div>
+                      </>
+                    ) : (
+                      <div className="rounded-3xl border border-amber-200 p-4 bg-amber-50 space-y-3">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Event date</p>
+                          <p className="text-xs text-muted-foreground">This party uses a fixed event date set by the owner.</p>
+                        </div>
+                        <div className="rounded-2xl border border-amber-100 bg-background p-3">
+                          {resolvedPartyEventDate ? (
+                            <p className="text-sm font-semibold text-foreground">{boat?.partyEventDate ? format(parseISO(boat.partyEventDate), "EEEE, d MMM yyyy") : resolvedPartyEventDate}</p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No event date provided. Contact the owner for the exact date.</p>
+                          )}
+                        </div>
                       </div>
-                      {/* Legend */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1 text-xs text-muted-foreground border-t border-border">
-                        <span className="flex items-center gap-1.5 pt-2">
-                          <span className="inline-block h-3 w-3 rounded-full bg-primary" />
-                          Selected
-                        </span>
-                        <span className="flex items-center gap-1.5 pt-2">
-                          <span className="inline-block h-3 w-3 rounded-full bg-accent border border-border" />
-                          Today
-                        </span>
-                        <span className="flex items-center gap-1.5 pt-2 text-destructive/80">
-                          <span className="inline-block h-3 w-3 rounded-full bg-destructive/15 border border-destructive/30" />
-                          {boat ? `${(boat.owner.name || "Owner").split(' ')[0]} unavailable` : "Owner unavailable"}
-                        </span>
-                        <span className="flex items-center gap-1.5 pt-2 opacity-50">
-                          <span className="inline-block h-3 w-3 rounded-full bg-muted border border-border" />
-                          Past dates
-                        </span>
-                      </div>
-                    </div>
+                    )}
 
                     {/* Departure time chips + guest stepper */}
                     <div className="rounded-3xl border border-border p-4 bg-muted/20 space-y-5">
@@ -1125,7 +1336,7 @@ const Booking = () => {
                             Party start time
                           </p>
                           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-1.5">
-                            <p className="text-lg font-semibold text-foreground">From {partyStartTime}</p>
+                            <p className="text-lg font-semibold text-foreground">From {resolvedPartyEventTime || "Not set"}</p>
                             <p className="text-xs text-muted-foreground">
                               Boarding opens at this time. Guests can arrive after the start and board whenever they want.
                             </p>
@@ -1231,7 +1442,7 @@ const Booking = () => {
                             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Departure</p>
                             <p className="text-sm font-semibold text-foreground">
                               {isPartyBooking
-                                ? `From ${partyStartTime} · boarding open after start`
+                                ? `From ${resolvedPartyEventTime || "Not set"} · boarding open after start`
                                 : departureTime
                                   ? `${departureTime} · ${boat?.departureMarina ?? "marina"}`
                                   : "Select a departure time"}
@@ -1514,7 +1725,7 @@ const Booking = () => {
                   </div>
                 ) : null}
 
-                {bookingStep === 3 && isPartyBooking ? (
+                {isPartyBooking ? (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold text-foreground">Sector 3: Review party booking</p>
@@ -1598,32 +1809,34 @@ const Booking = () => {
                   </div>
                 ) : null}
 
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setBookingStep((current) => (current > 1 ? ((current - 1) as 1 | 2 | 3 | 4) : current))}
-                    disabled={bookingStep === 1}
-                  >
-                    Back
-                  </Button>
+                {!isPartyBooking ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setBookingStep((current) => (current > 1 ? ((current - 1) as 1 | 2 | 3 | 4) : current))}
+                      disabled={bookingStep === 1}
+                    >
+                      Back
+                    </Button>
 
-                  {bookingStep === 1 ? (
-                    <Button type="button" onClick={() => setBookingStep(2)} disabled={!canContinueStep1} className="bg-gradient-accent text-accent-foreground">
-                      Continue
-                    </Button>
-                  ) : null}
-                  {bookingStep === 2 ? (
-                    <Button type="button" onClick={() => setBookingStep(3)} disabled={!canContinueStep2} className="bg-gradient-accent text-accent-foreground">
-                      Continue
-                    </Button>
-                  ) : null}
-                  {bookingStep === 3 && !isPartyBooking ? (
-                    <Button type="button" onClick={() => setBookingStep(4)} disabled={!canContinueStep3} className="bg-gradient-accent text-accent-foreground">
-                      Continue
-                    </Button>
-                  ) : null}
-                </div>
+                    {bookingStep === 1 ? (
+                      <Button type="button" onClick={() => setBookingStep(2)} disabled={!canContinueStep1} className="bg-gradient-accent text-accent-foreground">
+                        Continue
+                      </Button>
+                    ) : null}
+                    {bookingStep === 2 ? (
+                      <Button type="button" onClick={() => setBookingStep(3)} disabled={!canContinueStep2} className="bg-gradient-accent text-accent-foreground">
+                        Continue
+                      </Button>
+                    ) : null}
+                    {bookingStep === 3 && !isPartyBooking ? (
+                      <Button type="button" onClick={() => setBookingStep(4)} disabled={!canContinueStep3} className="bg-gradient-accent text-accent-foreground">
+                        Continue
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -1669,14 +1882,29 @@ const Booking = () => {
                       <span className="text-muted-foreground">Boat</span>
                       <span className="text-foreground font-medium">{boatName}</span>
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Day</span>
-                      <span className="text-foreground font-medium">{selectedDate ? format(selectedDate, "d MMM yyyy") : "Pick a date"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Departure</span>
-                      <span className="text-foreground font-medium">{departureTime || "Select time"}</span>
-                    </div>
+                    {isPartyBooking ? (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Event Date</span>
+                          <span className="text-foreground font-medium">{boat?.partyEventDate ? format(parseISO(boat.partyEventDate), "d MMM yyyy") : resolvedPartyEventDate || "Not set"}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Event Time</span>
+                          <span className="text-foreground font-medium">{resolvedPartyEventTime || "Not set"}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Day</span>
+                          <span className="text-foreground font-medium">{selectedDate ? format(selectedDate, "d MMM yyyy") : "Pick a date"}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Departure</span>
+                          <span className="text-foreground font-medium">{departureTime || "Select time"}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-muted-foreground">Payment method</span>
                       <span className="text-foreground font-medium">Card via Stripe Checkout</span>

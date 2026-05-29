@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { supabase } from "@/lib/supabase";
 import { BoatsGridSkeleton } from "@/components/loading/LoadingUI";
+import { fetchJsonFromEndpoints, resolveStripeCheckoutEndpoints } from "@/lib/api-endpoints";
+import { supabase } from "@/lib/supabase";
 
 type BoatRecord = {
   id: string;
@@ -29,7 +30,7 @@ function BoatCard({ boat }: BoatCardProps) {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const response = await fetch("/api/stripe/create-checkout", {
+      const payload = await fetchJsonFromEndpoints<{ sessionId?: string; checkoutUrl?: string; error?: string }>(resolveStripeCheckoutEndpoints(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -41,19 +42,6 @@ function BoatCard({ boat }: BoatCardProps) {
           cancelUrl: window.location.href,
         }),
       });
-
-      const responseRaw = await response.text();
-      let payload: { sessionId?: string; checkoutUrl?: string; error?: string } = {};
-      if (responseRaw) {
-        try {
-          payload = JSON.parse(responseRaw);
-        } catch {
-          throw new Error("Stripe checkout API returned a non-JSON response. Check Vite /api proxy and API server logs.");
-        }
-      }
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Failed to create checkout session");
-      }
 
       const checkoutUrl = String(payload.checkoutUrl ?? "").trim();
       if (checkoutUrl) {

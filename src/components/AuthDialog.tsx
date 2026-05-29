@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { Mail } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { Loader2, Mail } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,9 @@ interface AuthDialogProps {
 const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) => {
   const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isSignInSubmitting, setIsSignInSubmitting] = useState(false);
+  const [isSignUpSubmitting, setIsSignUpSubmitting] = useState(false);
 
   const [signInEmail, setSignInEmail] = useState("");
   const [signInPassword, setSignInPassword] = useState("");
@@ -43,6 +46,23 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
   const googleClientId = sanitizeGoogleClientId(import.meta.env.VITE_GOOGLE_CLIENT_ID);
   const hasUsableGoogleClientId = isGoogleClientIdUsable(googleClientId);
   const currentOrigin = typeof window !== "undefined" ? window.location.origin : "your deployed domain";
+  const isBusy = isGoogleSubmitting || isSignInSubmitting || isSignUpSubmitting;
+
+  useEffect(() => {
+    if (!open) {
+      setErrorMessage("");
+      setTab("signin");
+      setIsGoogleSubmitting(false);
+      setIsSignInSubmitting(false);
+      setIsSignUpSubmitting(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  }, [tab]);
 
   const onAuthSuccess = (user: AuthUser) => {
     setErrorMessage("");
@@ -51,29 +71,58 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
   };
 
   const handleGoogleSignIn = async () => {
+    if (isBusy) return;
+
+    setErrorMessage("");
+    setIsGoogleSubmitting(true);
+
     try {
       await signInWithGoogle(window.location.href, { rememberMe });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to complete Google sign in.");
+      setErrorMessage(error instanceof Error ? error.message : "Unable to complete Google login.");
+    } finally {
+      setIsGoogleSubmitting(false);
     }
   };
 
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isBusy) return;
+
     setErrorMessage("");
     setRememberMePreference(rememberMe);
+    setIsSignInSubmitting(true);
+
+    const email = signInEmail.trim().toLowerCase();
 
     try {
-      const user = await signInWithEmail(signInEmail, signInPassword, { rememberMe });
+      const user = await signInWithEmail(email, signInPassword, { rememberMe });
       onAuthSuccess(user);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to sign in.");
+      setErrorMessage(error instanceof Error ? error.message : "Unable to log in.");
+    } finally {
+      setIsSignInSubmitting(false);
     }
   };
 
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isBusy) return;
+
     setErrorMessage("");
+
+    const trimmedName = signUpName.trim();
+    const email = signUpEmail.trim().toLowerCase();
+
+    if (!trimmedName) {
+      setErrorMessage("Please enter your full name.");
+      return;
+    }
+
+    if (signUpPassword.length < 8) {
+      setErrorMessage("Password must be at least 8 characters.");
+      return;
+    }
 
     if (signUpPassword !== signUpPasswordConfirm) {
       setErrorMessage("Passwords do not match.");
@@ -81,36 +130,53 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
     }
 
     setRememberMePreference(rememberMe);
+    setIsSignUpSubmitting(true);
 
     try {
-      const user = await signUpWithEmail(signUpName, signUpEmail, signUpPassword, { rememberMe });
+      const user = await signUpWithEmail(trimmedName, email, signUpPassword, { rememberMe });
       onAuthSuccess(user);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to create account.");
+    } finally {
+      setIsSignUpSubmitting(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md border-aegean/20">
-        <DialogHeader>
-          <DialogTitle className="text-xl">Welcome to Nautiq</DialogTitle>
-          <DialogDescription>
-            Fast sign in with Google or continue with email.
+      <DialogContent className="sm:max-w-lg overflow-hidden border-aegean/30 p-0">
+        <DialogHeader className="space-y-2 border-b border-border/60 bg-gradient-to-br from-aegean/15 via-background to-coral/10 px-6 py-5">
+          <DialogTitle className="text-2xl font-semibold tracking-tight">Welcome to Nautiplex</DialogTitle>
+          <DialogDescription className="max-w-prose text-sm leading-relaxed">
+            Fast login with Google or continue with email.
           </DialogDescription>
         </DialogHeader>
 
+        <div className="space-y-4 px-6 py-5">
         <Tabs value={tab} onValueChange={(value) => setTab(value as "signin" | "signup")}>
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="signin">Sign In</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 rounded-xl bg-muted p-1">
+            <TabsTrigger value="signin" disabled={isBusy}>Login</TabsTrigger>
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
 
           <div className="mt-4">
             {hasUsableGoogleClientId ? (
               <div className="w-full">
-                <Button type="button" variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-                  Continue with Google
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleGoogleSignIn}
+                  disabled={isBusy}
+                >
+                  {isGoogleSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Redirecting...
+                    </>
+                  ) : (
+                    "Continue with Google"
+                  )}
                 </Button>
               </div>
             ) : (
@@ -133,9 +199,10 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   id="signin-email"
                   type="email"
                   autoComplete="email"
-                  placeholder="captain@nautiq.com"
+                  placeholder="captain@nautiplex.com"
                   value={signInEmail}
                   onChange={(event) => setSignInEmail(event.target.value)}
+                  disabled={isSignInSubmitting}
                   required
                 />
               </div>
@@ -147,6 +214,7 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   autoComplete="current-password"
                   value={signInPassword}
                   onChange={(event) => setSignInPassword(event.target.value)}
+                  disabled={isSignInSubmitting}
                   required
                 />
               </div>
@@ -157,6 +225,7 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   checked={rememberMe}
                   onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
                   className="mt-0.5"
+                  disabled={isBusy}
                 />
                 <div className="space-y-1">
                   <Label htmlFor="remember-me" className="cursor-pointer text-sm font-medium">
@@ -168,13 +237,20 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                 </div>
               </div>
 
-              {errorMessage && (
-                <p className="text-sm text-destructive">{errorMessage}</p>
-              )}
+              {errorMessage && <p className="text-sm text-destructive" aria-live="polite">{errorMessage}</p>}
 
-              <Button type="submit" className="w-full gap-2 bg-gradient-accent text-accent-foreground">
-                <Mail className="h-4 w-4" />
-                Sign In with Email
+              <Button type="submit" className="w-full gap-2 bg-gradient-accent text-accent-foreground" disabled={isBusy}>
+                {isSignInSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Logging in...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4" />
+                    Login with Email
+                  </>
+                )}
               </Button>
             </form>
           </TabsContent>
@@ -199,9 +275,10 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   id="signup-email"
                   type="email"
                   autoComplete="email"
-                  placeholder="captain@nautiq.com"
+                  placeholder="captain@nautiplex.com"
                   value={signUpEmail}
                   onChange={(event) => setSignUpEmail(event.target.value)}
+                  disabled={isSignUpSubmitting}
                   required
                 />
               </div>
@@ -213,6 +290,8 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   autoComplete="new-password"
                   value={signUpPassword}
                   onChange={(event) => setSignUpPassword(event.target.value)}
+                  minLength={8}
+                  disabled={isSignUpSubmitting}
                   required
                 />
               </div>
@@ -224,21 +303,31 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
                   autoComplete="new-password"
                   value={signUpPasswordConfirm}
                   onChange={(event) => setSignUpPasswordConfirm(event.target.value)}
+                  minLength={8}
+                  disabled={isSignUpSubmitting}
                   required
                 />
               </div>
 
-              {errorMessage && (
-                <p className="text-sm text-destructive">{errorMessage}</p>
-              )}
+              {errorMessage && <p className="text-sm text-destructive" aria-live="polite">{errorMessage}</p>}
 
-              <Button type="submit" className="w-full gap-2 bg-gradient-accent text-accent-foreground">
-                <Mail className="h-4 w-4" />
-                Create Email Account
+              <Button type="submit" className="w-full gap-2 bg-gradient-accent text-accent-foreground" disabled={isBusy}>
+                {isSignUpSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4" />
+                    Create Email Account
+                  </>
+                )}
               </Button>
             </form>
           </TabsContent>
         </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );

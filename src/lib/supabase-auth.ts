@@ -1,4 +1,4 @@
-import type { User } from "@supabase/supabase-js";
+﻿import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import type { DatabaseUsersRow } from "./supabase";
 import {
@@ -107,7 +107,7 @@ const buildProfileName = (user: User, fallbackName?: string) => {
     return email.split("@")[0];
   }
 
-  return "Nautiq User";
+  return "Nautiplex User";
 };
 
 const ensureUserProfile = async (user: User, fallbackName?: string): Promise<DatabaseUsersRow> => {
@@ -350,3 +350,4 @@ export const onAuthStateChange = (
     listener?.subscription.unsubscribe();
   };
 };
+

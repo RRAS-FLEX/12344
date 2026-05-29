@@ -1,6 +1,7 @@
-// Supabase Edge Function: stripe-webhook
+// Supabase Edge Function: stripe-webhook 
 // Handles Stripe webhooks, confirms bookings and queues customer emails.
 
+// @ts-nocheck
 import Stripe from "https://esm.sh/stripe@16.0.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.48.0?target=deno";
 
@@ -71,7 +72,7 @@ Deno.serve(async (req) => {
       const { data: booking, error: bookingLoadError } = await supabaseAdmin
         .from("bookings")
         .select(
-          "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout",
+           "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_event_date, party_event_time, party_tier_selected, party_tier_price, party_ticket_code, party_ticket_count, party_ticket_status",
         )
         .eq("id", bookingId)
         .maybeSingle();
@@ -135,11 +136,11 @@ Deno.serve(async (req) => {
         const amountFromStripe = typeof session.amount_total === "number" ? session.amount_total / 100 : null;
         const resolvedTotal = totalPrice > 0
           ? totalPrice
-          : (Number.isFinite(amountFromStripe) && amountFromStripe > 0 ? amountFromStripe : 0);
+           : (amountFromStripe !== null && Number.isFinite(amountFromStripe) && amountFromStripe > 0 ? amountFromStripe : 0);
 
         let amountDueNow = Number(booking.amount_due_now ?? 0);
         if (!Number.isFinite(amountDueNow) || amountDueNow <= 0) {
-          amountDueNow = Number.isFinite(amountFromStripe) && amountFromStripe > 0
+            amountDueNow = amountFromStripe !== null && Number.isFinite(amountFromStripe) && amountFromStripe > 0
             ? amountFromStripe
             : resolvedTotal;
         }
@@ -242,7 +243,7 @@ Deno.serve(async (req) => {
                 `Hi ${finalCustomerName},`,
                 "",
                 `Here are your booking details for ${boatName || booking.boat_name || "your trip"}.`,
-                `Package: ${booking.package_label || "Nautiq experience"}`,
+                `Package: ${booking.package_label || "Nautiplex experience"}`,
                 `Date: ${booking.start_date || "-"}`,
                 `Departure time: ${booking.departure_time || "-"}`,
                 `Meeting point: ${departureMarina || booking.departure_marina || "-"}`,
@@ -263,7 +264,7 @@ Deno.serve(async (req) => {
                 "We have also notified the owner about your confirmed booking.",
                 "",
                 "See you on the water,",
-                "Nautiq",
+                "Nautiplex",
               );
 
               const body = lines.join("\n");
@@ -288,7 +289,7 @@ Deno.serve(async (req) => {
                       Authorization: `Bearer ${resendApiKey}`,
                     },
                     body: JSON.stringify({
-                      from: "Nautiq Bookings <bookings@mail.nautiq.com>",
+                      from: "Nautiplex Bookings <bookings@mail.nautiplex.com>",
                       to: normalizedEmail,
                       subject,
                       text: body,
@@ -324,3 +325,4 @@ Deno.serve(async (req) => {
     headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 });
+

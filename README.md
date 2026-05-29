@@ -1,4 +1,4 @@
-# Nautiq
+# Nautiplex
 
 ## How can I edit this code?
 
@@ -176,3 +176,4 @@ Preview the production build with:
 ```sh
 npm run preview
 ```
+

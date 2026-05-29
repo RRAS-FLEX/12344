@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Menu, X, ChevronDown, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
-import NautiqLogo from "./NautiqLogo";
+import NautiplexLogo from "./NautiplexLogo";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import AuthDialog from "./AuthDialog";
@@ -82,7 +82,7 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-card/90 backdrop-blur-xl border-b border-border shadow-[0_6px_24px_hsl(var(--ocean)_/_0.08)]">
       <div className="w-full max-w-10xl mx-auto flex items-center justify-between h-16 px-4">
-        <NautiqLogo />
+        <NautiplexLogo />
 
         {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-6">
@@ -316,3 +316,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+

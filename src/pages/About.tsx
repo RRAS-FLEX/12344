@@ -50,8 +50,8 @@ type ImpactStat = {
 const faqs = [
   {
     question: {
-      en: "How does Nautiq verify boats and owners?",
-      el: "Πώς επαληθεύει το Nautiq τα σκάφη και τους ιδιοκτήτες;",
+      en: "How does Nautiplex verify boats and owners?",
+      el: "Πώς επαληθεύει το Nautiplex τα σκάφη και τους ιδιοκτήτες;",
     },
     answer: {
       en: "Listings are reviewed before going live, and owner profiles include identity and listing quality checks.",
@@ -70,8 +70,8 @@ const faqs = [
   },
   {
     question: {
-      en: "Is Nautiq focused only on Greece?",
-      el: "Το Nautiq επικεντρώνεται μόνο στην Ελλάδα;",
+      en: "Is Nautiplex focused only on Greece?",
+      el: "Το Nautiplex επικεντρώνεται μόνο στην Ελλάδα;",
     },
     answer: {
       en: "Today we focus on Greek destinations to ensure quality. We plan to expand to more Mediterranean regions next.",
@@ -148,7 +148,7 @@ const About = () => {
   useSEO({
     title: "About Nautiplex — Greece's Trusted Boat Rental Platform",
     description: "Learn how Nautiplex connects travelers with verified boat owners across the Greek islands. Our mission: make sea experiences accessible, safe, and unforgettable.",
-    canonical: "https://nautiq.gr/about",
+    canonical: "https://nautiplex.gr/about",
     keywords: "about Nautiplex, boat rental platform Greece, trusted boat owners, Greek sea experiences",
   });
 
@@ -443,3 +443,4 @@ const About = () => {
 };
 
 export default About;
+
