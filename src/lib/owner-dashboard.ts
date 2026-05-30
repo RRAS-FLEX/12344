@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { fetchJsonFromEndpoints, resolveBoatImageSignEndpoints } from "./api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "./storage-public";
 import { uploadBoatImageToStorage } from "./boat-images";
 
@@ -13,6 +14,7 @@ export interface BoatDocument {
 
 export interface OwnerBoat {
   id: string;
+  locationId?: string | null;
   name: string;
   type: string;
   location: string;
@@ -60,6 +62,7 @@ type OwnerBoatUpdateMutation = Partial<OwnerBoat> & {
 };
 
 type PartyBoatSectorRow = {
+  id?: string | null;
   boat_id?: string | null;
   ticket_max_people?: number | null;
   ticket_price_per_person?: number | null;
@@ -227,9 +230,94 @@ const normalizeBoatImagePath = (value: string | null | undefined) => {
   return `${trimmed.replace(/\/+$/, "")}/1.jpg`;
 };
 
-const resolveOwnerBoatImage = (boat: any) => {
-  const candidate = normalizeBoatImagePath(boat.images ?? boat.image);
-  return resolveStorageImage(candidate, "boat-images", "/placeholder.svg");
+const getOwnerBoatImageCandidates = (boat: any) => {
+  const rawImages = boat.images;
+  const legacyImage = boat.image;
+
+  if (Array.isArray(rawImages)) {
+    const candidates = rawImages
+      .map((value) => normalizeBoatImagePath(String(value ?? "")))
+      .filter(Boolean);
+    if (candidates.length > 0) return candidates;
+  }
+
+  if (typeof rawImages === "string" && rawImages.trim()) {
+    return [normalizeBoatImagePath(rawImages)].filter(Boolean);
+  }
+
+  if (typeof legacyImage === "string" && legacyImage.trim()) {
+    return [normalizeBoatImagePath(legacyImage)].filter(Boolean);
+  }
+
+  return [];
+};
+
+const toSignableOwnerBoatImagePath = (value: string) => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const parsed = parseStorageReference(trimmed, "boat-images");
+  if (!parsed || parsed.bucket !== "boat-images" || !parsed.path) {
+    return null;
+  }
+  return parsed.path;
+};
+
+const fetchSignedOwnerBoatImageUrls = async (rows: any[]): Promise<Map<string, string>> => {
+  const uniquePaths = Array.from(
+    new Set(
+      rows.flatMap((row) =>
+        getOwnerBoatImageCandidates(row)
+          .map((candidate) => toSignableOwnerBoatImagePath(candidate))
+          .filter((path): path is string => Boolean(path)),
+      ),
+    ),
+  );
+
+  if (uniquePaths.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const payload = await fetchJsonFromEndpoints<{ urls?: Record<string, string> }>(
+      resolveBoatImageSignEndpoints(),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: uniquePaths, expiresIn: 3600 }),
+      },
+    );
+
+    const map = new Map<string, string>();
+    for (const [path, signedUrl] of Object.entries(payload?.urls ?? {})) {
+      if (typeof signedUrl === "string" && signedUrl.trim()) {
+        map.set(path, signedUrl);
+      }
+    }
+
+    return map;
+  } catch {
+    return new Map();
+  }
+};
+
+const resolveOwnerBoatImage = (boat: any, signedImageUrls?: Map<string, string>) => {
+  const candidates = getOwnerBoatImageCandidates(boat);
+  if (candidates.length === 0) {
+    return "/placeholder.svg";
+  }
+
+  for (const candidate of candidates) {
+    const signPath = toSignableOwnerBoatImagePath(candidate);
+    if (signPath) {
+      const signedUrl = signedImageUrls?.get(signPath);
+      if (signedUrl) {
+        return signedUrl;
+      }
+      return "/placeholder.svg";
+    }
+  }
+
+  return resolveStorageImage(candidates[0], "boat-images", "/placeholder.svg");
 };
 
 const uploadBoatDocument = async (basePath: string, document: BoatDocument) => {
@@ -267,10 +355,12 @@ const mapOwnerBoat = (
   boat: any,
   features: string[],
   documents: BoatDocument[],
+  signedImageUrls: Map<string, string>,
   partySector?: PartyBoatSectorRow,
   watersportsSector?: WatersportsBoatSectorRow,
 ): OwnerBoat => ({
   id: boat.id,
+  locationId: boat.location_id ?? null,
   name: boat.name,
   type: watersportsSector?.boat_id ? "watersports" : boat.type,
   location: boat.location,
@@ -285,18 +375,18 @@ const mapOwnerBoat = (
   mapQuery: boat.map_query ?? "",
   externalCalendarUrl: boat.external_calendar_url ?? "",
   flashSaleEnabled: Boolean(boat.flash_sale_enabled),
-  partyReady: Boolean(partySector?.boat_id),
+  partyReady: Boolean(partySector?.id || partySector?.boat_id),
   partyEventDate: partySector?.party_event_date ?? null,
   partyEventTime: partySector?.party_event_time ?? null,
   partyTiers: parsePartyTiers(partySector?.party_tiers),
   unavailableDates: Array.isArray(boat.unavailable_dates) ? boat.unavailable_dates : [],
   minNoticeHours: Number(boat.min_notice_hours ?? 24),
   capacity: Number(boat.capacity ?? 0),
-  pricePerDay: Number(boat.price_per_day ?? 0),
+  pricePerDay: Number(boat.price ?? 0),
   ticketMaxPeople: Number(partySector?.ticket_max_people ?? boat.capacity ?? 0),
   ticketPricePerPerson: Number(partySector?.ticket_price_per_person ?? 0),
   rating: Number(boat.rating ?? 0),
-  image: resolveOwnerBoatImage(boat),
+  image: resolveOwnerBoatImage(boat, signedImageUrls),
   features,
   skipperRequired: Boolean(boat.skipper_required),
   documents,
@@ -325,12 +415,13 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
 
   const boatRows = Array.isArray(boats) ? boats : [];
   const boatIds = boatRows.map((boat) => boat.id).filter(Boolean);
+  const signedImageUrls = await fetchSignedOwnerBoatImageUrls(boatRows);
 
-  const [partyResult, watersportsResult] = await Promise.all([
+  const [partyByIdResult, watersportsResult] = await Promise.all([
     boatIds.length > 0
       ? partyBoatsTable
-          .select("boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
-          .in("boat_id", boatIds)
+          .select("id, boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
+          .in("id", boatIds)
       : Promise.resolve({ data: [], error: null }),
     boatIds.length > 0
       ? watersportsBoatsTable
@@ -339,12 +430,23 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const partyByBoatId = new Map<string, PartyBoatSectorRow>();
-  if (!partyResult.error && Array.isArray(partyResult.data)) {
-    for (const row of partyResult.data as PartyBoatSectorRow[]) {
-      const key = String(row.boat_id ?? "").trim();
-      if (key) partyByBoatId.set(key, row);
+  let partyRows: PartyBoatSectorRow[] = [];
+  if (!partyByIdResult.error && Array.isArray(partyByIdResult.data)) {
+    partyRows = partyByIdResult.data as PartyBoatSectorRow[];
+  } else if (boatIds.length > 0) {
+    const partyByBoatIdResult = await partyBoatsTable
+      .select("id, boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
+      .in("boat_id", boatIds);
+
+    if (!partyByBoatIdResult.error && Array.isArray(partyByBoatIdResult.data)) {
+      partyRows = partyByBoatIdResult.data as PartyBoatSectorRow[];
     }
+  }
+
+  const partyByBoatId = new Map<string, PartyBoatSectorRow>();
+  for (const row of partyRows) {
+    const key = String(row.id ?? row.boat_id ?? "").trim();
+    if (key) partyByBoatId.set(key, row);
   }
 
   const watersportsByBoatId = new Map<string, WatersportsBoatSectorRow>();
@@ -370,6 +472,7 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
         boat,
         Array.isArray(featureRows) ? featureRows.map((feature: any) => feature.feature) : [],
         resolvedDocuments,
+        signedImageUrls,
         partyByBoatId.get(boat.id),
         watersportsByBoatId.get(boat.id),
       );
@@ -407,24 +510,25 @@ export const syncBoatSectorRows = async (
     try {
       console.debug("syncBoatSectorRows: upserting party_boats for", boatId, { partyEventDate: payload.partyEventDate, partyEventTime: payload.partyEventTime });
       const { error } = await partyBoatsTable.upsert({
-      boat_id: boatId,
-      owner_id: ownerId,
-      name: payload.name,
-      location: payload.location,
-      description: payload.description,
-      departure_marina: payload.departureMarina,
-      capacity: payload.capacity,
-      ticket_max_people: payload.ticketMaxPeople,
-      ticket_price_per_person: payload.ticketPricePerPerson,
-      party_tiers: Array.isArray(payload.partyTiers) ? payload.partyTiers : null,
-      party_event_date: payload.partyEventDate ?? null,
-      party_event_time: payload.partyEventTime ?? null,
-      images: stripDataUrl(payload.image),
-      status: payload.status ?? "active",
-      map_query: payload.mapQuery ?? "",
-      flash_sale_enabled: Boolean(payload.flashSaleEnabled),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "boat_id" });
+        id: boatId,
+        boat_id: boatId,
+        owner_id: ownerId,
+        name: payload.name,
+        location: payload.location,
+        description: payload.description,
+        departure_marina: payload.departureMarina,
+        capacity: payload.capacity,
+        ticket_max_people: payload.ticketMaxPeople,
+        ticket_price_per_person: payload.ticketPricePerPerson,
+        party_tiers: Array.isArray(payload.partyTiers) ? payload.partyTiers : null,
+        party_event_date: payload.partyEventDate ?? null,
+        party_event_time: payload.partyEventTime ?? null,
+        images: stripDataUrl(payload.image),
+        status: payload.status ?? "active",
+        map_query: payload.mapQuery ?? "",
+        flash_sale_enabled: Boolean(payload.flashSaleEnabled),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
       if (error) {
         console.error("syncBoatSectorRows: party_boats upsert error", error);
         throw new Error(error.message || "Failed to sync party sector row");
@@ -437,11 +541,13 @@ export const syncBoatSectorRows = async (
   } else {
     try {
       console.debug("syncBoatSectorRows: deleting party_boats for", boatId);
-      const { error } = await partyBoatsTable.delete().eq("boat_id", boatId).eq("owner_id", ownerId);
+      const { error } = await partyBoatsTable.delete().eq("id", boatId).eq("owner_id", ownerId);
       if (error) {
         console.error("syncBoatSectorRows: party_boats delete error", error);
         throw new Error(error.message || "Failed to delete party sector row");
       }
+      // Backward compatibility cleanup for legacy rows keyed by boat_id.
+      await partyBoatsTable.delete().eq("boat_id", boatId).eq("owner_id", ownerId);
       console.debug("syncBoatSectorRows: party_boats delete OK", boatId);
     } catch (err) {
       console.error("syncBoatSectorRows: unexpected error during party_boats delete", err);
@@ -481,6 +587,7 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
   const documentsTable = (supabase as any).from("boat_documents");
   const safeFeatures = Array.isArray(boat.features) ? boat.features : [];
   const safeDocuments = Array.isArray(boat.documents) ? boat.documents : [];
+  const savedStatus = boat.status === "active" ? "inactive" : boat.status;
 
   const { data: insertedBoat, error } = await boatsTable
     .insert({
@@ -488,6 +595,7 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
       name: boat.name,
       description: boat.description,
       type: isWatersportsType(boat.type) ? "rental" : boat.type,
+      location_id: boat.locationId ?? null,
       location: boat.location,
       length_meters: boat.lengthMeters,
       year: boat.year,
@@ -503,12 +611,11 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
       unavailable_dates: normalizeUnavailableDates(boat.unavailableDates),
       min_notice_hours: boat.minNoticeHours,
       capacity: boat.capacity,
-      price_per_day: boat.pricePerDay,
       rating: boat.rating,
       images: stripDataUrl(boat.image),
       skipper_required: boat.skipperRequired,
       documents_folder: "",
-      status: boat.status,
+      status: savedStatus,
       bookings: boat.bookings,
       revenue: boat.revenue,
     })
@@ -557,7 +664,7 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
     partyEventTime: boat.partyEventTime ?? null,
     partyTiers: Array.isArray((boat as any).partyTiers) ? (boat as any).partyTiers : [],
     image: primaryImagePath,
-    status: boat.status,
+    status: savedStatus,
     mapQuery: boat.mapQuery,
     flashSaleEnabled: Boolean(boat.flashSaleEnabled),
     pricePerDay: Number(boat.pricePerDay ?? 0),
@@ -637,6 +744,7 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   if (updates.name !== undefined) boatUpdates.name = updates.name;
   if (updates.type !== undefined) boatUpdates.type = isWatersportsType(updates.type) ? "rental" : updates.type;
   if (updates.location !== undefined) boatUpdates.location = updates.location;
+  if (updates.locationId !== undefined) boatUpdates.location_id = updates.locationId;
   if (updates.description !== undefined) boatUpdates.description = updates.description;
   if (updates.lengthMeters !== undefined) boatUpdates.length_meters = updates.lengthMeters;
   if (updates.year !== undefined) boatUpdates.year = updates.year;
@@ -654,11 +762,29 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   }
   if (updates.minNoticeHours !== undefined) boatUpdates.min_notice_hours = updates.minNoticeHours;
   if (updates.capacity !== undefined) boatUpdates.capacity = updates.capacity;
-  if (updates.pricePerDay !== undefined) boatUpdates.price_per_day = updates.pricePerDay;
   if (updates.rating !== undefined) boatUpdates.rating = updates.rating;
   if (updates.image !== undefined) boatUpdates.images = stripDataUrl(updates.image as string);
   if (updates.skipperRequired !== undefined) boatUpdates.skipper_required = updates.skipperRequired;
-  if (updates.status !== undefined) boatUpdates.status = updates.status;
+  if (updates.status !== undefined) {
+    if (updates.status === "active") {
+      const { data: linkedPackages, error: packageError } = await (supabase as any)
+        .from("owner_package_boats")
+        .select("package_id, owner_packages!inner(id, owner_id)")
+        .eq("boat_id", boatId)
+        .eq("owner_packages.owner_id", session.user.id)
+        .limit(1);
+
+      if (packageError) {
+        throw new Error(packageError.message || "Failed to verify boat packages");
+      }
+
+      if (!Array.isArray(linkedPackages) || linkedPackages.length === 0) {
+        throw new Error("Add at least one package before making this boat active.");
+      }
+    }
+
+    boatUpdates.status = updates.status;
+  }
   if (updates.bookings !== undefined) boatUpdates.bookings = updates.bookings;
   if (updates.revenue !== undefined) boatUpdates.revenue = updates.revenue;
 
@@ -689,11 +815,23 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   }
 
   const partyBoatsTable = (supabase as any).from("party_boats");
-  const { data: existingPartySector } = await partyBoatsTable
-    .select("boat_id, party_tiers")
-    .eq("boat_id", boatId)
+  let existingPartySector: PartyBoatSectorRow | null = null;
+  const { data: existingPartyById } = await partyBoatsTable
+    .select("id, boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
+    .eq("id", boatId)
     .eq("owner_id", session.user.id)
     .maybeSingle();
+
+  if (existingPartyById) {
+    existingPartySector = existingPartyById as PartyBoatSectorRow;
+  } else {
+    const { data: existingPartyByBoatId } = await partyBoatsTable
+      .select("id, boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
+      .eq("boat_id", boatId)
+      .eq("owner_id", session.user.id)
+      .maybeSingle();
+    existingPartySector = (existingPartyByBoatId as PartyBoatSectorRow | null) ?? null;
+  }
 
   const { data: refreshedBaseBoat } = await boatsTable
     .select("*")
@@ -703,17 +841,17 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
 
   if (refreshedBaseBoat) {
     await syncBoatSectorRows(boatId, session.user.id, {
-      partyReady: Boolean(updates.partyReady ?? existingPartySector?.boat_id),
+      partyReady: Boolean(updates.partyReady ?? existingPartySector?.id ?? existingPartySector?.boat_id),
       type: String(updates.type ?? refreshedBaseBoat.type ?? ""),
       name: String(updates.name ?? refreshedBaseBoat.name ?? ""),
       location: String(updates.location ?? refreshedBaseBoat.location ?? ""),
       description: String(updates.description ?? refreshedBaseBoat.description ?? ""),
       departureMarina: String(updates.departureMarina ?? refreshedBaseBoat.departure_marina ?? ""),
       capacity: Number(updates.capacity ?? refreshedBaseBoat.capacity ?? 0),
-      ticketMaxPeople: Number(updates.ticketMaxPeople ?? refreshedBaseBoat.capacity ?? 0),
-      ticketPricePerPerson: Number(updates.ticketPricePerPerson ?? 0),
-      partyEventDate: updates.partyEventDate ?? null,
-      partyEventTime: updates.partyEventTime ?? null,
+      ticketMaxPeople: Number(updates.ticketMaxPeople ?? existingPartySector?.ticket_max_people ?? refreshedBaseBoat.capacity ?? 0),
+      ticketPricePerPerson: Number(updates.ticketPricePerPerson ?? existingPartySector?.ticket_price_per_person ?? 0),
+      partyEventDate: updates.partyEventDate ?? existingPartySector?.party_event_date ?? null,
+      partyEventTime: updates.partyEventTime ?? existingPartySector?.party_event_time ?? null,
       partyTiers: Array.isArray((updates as any).partyTiers)
         ? (updates as any).partyTiers
         : parsePartyTiers(existingPartySector?.party_tiers),
@@ -721,7 +859,7 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
       status: updates.status ?? refreshedBaseBoat.status,
       mapQuery: updates.mapQuery ?? refreshedBaseBoat.map_query,
       flashSaleEnabled: Boolean(updates.flashSaleEnabled ?? refreshedBaseBoat.flash_sale_enabled),
-      pricePerDay: Number(updates.pricePerDay ?? refreshedBaseBoat.price_per_day ?? 0),
+      pricePerDay: Number(updates.pricePerDay ?? 0),
     });
   }
 
@@ -1010,6 +1148,7 @@ export const saveBoatPackages = async (
   if (linkError) {
     throw new Error(linkError.message || "Failed to link boat packages");
   }
+
 };
 
 export const addOwnerPackage = async (pkg: Omit<OwnerPackage, "id">): Promise<OwnerPackage> => {

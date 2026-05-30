@@ -34,13 +34,13 @@ export type Database = {
         Row: {
           id: string;
           owner_id: string;
+          location_id: string | null;
           name: string;
           description: string | null;
           type: string;
           location: string;
           capacity: number;
           price: number | null;
-          price_per_day: number;
           rating: number;
           image: string;
           images: string | null;
@@ -57,13 +57,13 @@ export type Database = {
         Insert: {
           id?: string;
           owner_id: string;
+          location_id?: string | null;
           name: string;
           description?: string | null;
           type: string;
           location: string;
           capacity: number;
           price?: number | null;
-          price_per_day: number;
           rating?: number;
           image?: string;
           images?: string | null;
@@ -80,13 +80,13 @@ export type Database = {
         Update: {
           id?: string;
           owner_id?: string;
+          location_id?: string | null;
           name?: string;
           description?: string | null;
           type?: string;
           location?: string;
           capacity?: number;
           price?: number | null;
-          price_per_day?: number;
           rating?: number;
           image?: string;
           images?: string | null;
@@ -98,6 +98,33 @@ export type Database = {
           bookings?: number;
           revenue?: number;
           updated_at?: string;
+        };
+      };
+      boat_locations: {
+        Row: {
+          id: string;
+          name: string;
+          location: string;
+          map_query: string;
+          latitude: number | null;
+          longitude: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          location: string;
+          map_query: string;
+          latitude?: number | null;
+          longitude?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          location?: string;
+          map_query?: string;
+          latitude?: number | null;
+          longitude?: number | null;
         };
       };
       boat_features: {

@@ -306,40 +306,7 @@ const loadDayBookedSlots = async (boatId: string, date: string): Promise<DayBook
           .filter((slot: DayBookingSlot | null): slot is DayBookingSlot => Boolean(slot))
       : [];
 
-  // Blocked / maintenance events from calendar_events for this day
-  const dayStartIso = `${date}T00:00:00.000Z`;
-  const nextDay = new Date(`${date}T00:00:00.000Z`);
-  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
-  const nextDayIso = nextDay.toISOString();
-
-  const { data: calendarRows, error: calendarError } = await supabase
-    .from("calendar_events")
-    .select("start_time, end_time, all_day")
-    .eq("boat_id", boatId)
-    .gte("start_time", dayStartIso)
-    .lt("start_time", nextDayIso);
-
-  const slotsFromCalendar: DayBookingSlot[] =
-    !calendarError && Array.isArray(calendarRows)
-      ? calendarRows
-          .map((row) => {
-            const calendarRow = row as DayCalendarEventRow;
-            const isAllDay = Boolean(calendarRow.all_day);
-            const startTime = isoToTimeString(calendarRow.start_time);
-            const endTime = isAllDay
-              ? "20:00"
-              : isoToTimeString(calendarRow.end_time ?? calendarRow.start_time);
-
-            if (!startTime || !endTime || !isValidTime(startTime) || !isValidTime(endTime)) {
-              return null;
-            }
-
-            return { departureTime: startTime, endTime } satisfies DayBookingSlot;
-          })
-          .filter((slot: DayBookingSlot | null): slot is DayBookingSlot => Boolean(slot))
-      : [];
-
-  return [...slotsFromBookings, ...slotsFromCalendar];
+  return slotsFromBookings;
 };
 
 export const hasAnyDayOccupancy = async (boatId: string, date: string): Promise<boolean> => {

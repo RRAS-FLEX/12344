@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { addDays, addHours, format, isSameDay, isWeekend, parseISO, startOfDay } from "date-fns";
-import { CalendarCheck2, CalendarDays, Clock, CreditCard, Fuel, LogIn, Mail, MapPin, MessageCircle, Navigation, ShieldCheck, Sparkles, Star, Users } from "lucide-react";
+import { CalendarCheck2, CalendarDays, Clock, CreditCard, Fuel, Loader2, LogIn, Mail, MapPin, MessageCircle, Navigation, ShieldCheck, Sparkles, Star, Users } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -159,6 +159,7 @@ const Booking = () => {
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1);
   const [autoUnavailableDates, setAutoUnavailableDates] = useState<Date[]>([]);
   const [oilPricePerLitre, setOilPricePerLitre] = useState(1.95);
+  const [isConfirming, setIsConfirming] = useState(false);
   const partyStartTime = boat?.partyEventTime?.trim() || "";
   const partyDurationHours = 8;
   const [selectedPartyTier, setSelectedPartyTier] = useState<string | null>(null);
@@ -316,21 +317,16 @@ const Booking = () => {
     .reduce((total, item) => total + item.price, 0);
   const crazySeaRoutingFee = isPartyBooking ? 0 : (selectedPackage.hours >= 8 ? 95 : 0);
   const suggestedFuelLitres = Math.min(120, bookingDurationHours * 8 + Math.max(guestCount - 4, 0) * 2);
-  const staticUnavailableDates = useMemo(
-    () => boat?.availability.unavailableDates.map((date) => parseISO(date)) ?? [],
-    [boat],
-  );
   const unavailableDates = useMemo(() => {
-    const combined = [...staticUnavailableDates, ...autoUnavailableDates];
-    if (combined.length === 0) return combined;
+    if (autoUnavailableDates.length === 0) return autoUnavailableDates;
     const seen = new Set<number>();
-    return combined.filter((date) => {
+    return autoUnavailableDates.filter((date) => {
       const key = startOfDay(date).getTime();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [staticUnavailableDates, autoUnavailableDates]);
+  }, [autoUnavailableDates]);
   const nextAvailableDate = useMemo(() => {
     return Array.from({ length: 21 }, (_, index) => addDays(startOfDay(new Date()), index)).find(
       (date) => !unavailableDates.some((blockedDate) => isSameDay(blockedDate, date)),
@@ -349,7 +345,6 @@ const Booking = () => {
     : basePackagePrice +
       fuelCost +
       skipperCost +
-      guestExperienceFee +
       flexibleCancellationCost +
       extrasCost +
       crazySeaRoutingFee;
@@ -368,11 +363,11 @@ const Booking = () => {
   const ownerPayout = Math.max(estimatedTotal - platformCommission, 0);
   const depositAmount = pricing.depositAmount;
   const amountDueNow = pricing.amountDueNow;
+  const resolvedPartyEventDate = boat?.partyEventDate?.trim() || (selectedDate ? format(selectedDate, "yyyy-MM-dd") : "");
+  const resolvedPartyEventTime = boat?.partyEventTime?.trim() || departureTime || "";
   const bookingDateString = isPartyBooking
-    ? (boat?.partyEventDate?.trim() || "")
+    ? resolvedPartyEventDate
     : (selectedDate ? format(selectedDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"));
-  const resolvedPartyEventDate = boat?.partyEventDate?.trim() || "";
-  const resolvedPartyEventTime = boat?.partyEventTime?.trim() || "";
   // Allow party bookings to proceed without selecting a calendar date (owner provides event date)
   const isPartySoldOut = isPartyBooking && ticketMaxPeople > 0 && ticketsRemaining <= 0;
   const canContinueStep1 = isPartyBooking ? !isPartySoldOut : Boolean(selectedDate && availableDepartureTimes.includes(departureTime));
@@ -385,6 +380,29 @@ const Booking = () => {
   const selectedExtraLabels = useMemo(
     () => ownerUpgrades.filter((item) => selectedExtras.includes(item.id)).map((item) => item.label),
     [selectedExtras, ownerUpgrades],
+  );
+
+  const sortedDepartureTimes = useMemo(
+    () => [...availableDepartureTimes].sort((a, b) => a.localeCompare(b)),
+    [availableDepartureTimes],
+  );
+
+  const recommendedDepartureTimeSet = useMemo(() => {
+    const ranked = [...departureRecommendations]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((item) => item.departureTime);
+    return new Set(ranked);
+  }, [departureRecommendations]);
+
+  const recommendedDepartureTimes = useMemo(
+    () => sortedDepartureTimes.filter((slot) => recommendedDepartureTimeSet.has(slot)),
+    [sortedDepartureTimes, recommendedDepartureTimeSet],
+  );
+
+  const otherDepartureTimes = useMemo(
+    () => sortedDepartureTimes.filter((slot) => !recommendedDepartureTimeSet.has(slot)),
+    [sortedDepartureTimes, recommendedDepartureTimeSet],
   );
 
   useEffect(() => {
@@ -451,9 +469,9 @@ const Booking = () => {
       const { data, error } = await supabase
         .from("bookings")
         .select("guests, status, package_label")
-        .eq("boat_id", boat.id)
+        .or(`boat_id.eq.${boat.id},boat_name.eq.${boat.name}`)
         .eq("start_date", partyInventoryDateString)
-        .in("status", ["pending", "confirmed"]);
+        .eq("status", "confirmed");
 
       if (cancelled) return;
 
@@ -509,11 +527,6 @@ const Booking = () => {
       for (const date of daysToCheck) {
         if (cancelled) return;
 
-        // Skip dates already statically unavailable
-        if (staticUnavailableDates.some((blockedDate) => isSameDay(blockedDate, date))) {
-          continue;
-        }
-
         const isoDate = format(date, "yyyy-MM-dd");
         const availableTimesForDay = await getAvailableDepartureTimes(boat.id, isoDate, bookingDurationHours);
         if (cancelled) return;
@@ -536,7 +549,7 @@ const Booking = () => {
       cancelled = true;
       setIsCalendarLoading(false);
     };
-  }, [boat?.id, bookingDurationHours, staticUnavailableDates, bookingsRealtimeTick, calendarRealtimeTick]);
+  }, [boat?.id, bookingDurationHours, bookingsRealtimeTick, calendarRealtimeTick]);
 
   useEffect(() => {
     if (isPartyBooking) {
@@ -712,6 +725,10 @@ const Booking = () => {
   };
 
   const handleConfirmBooking = async () => {
+    if (isConfirming) {
+      return;
+    }
+
     if (!boat) {
       toast({
         title: tl("Boat not found", "Το σκάφος δεν βρέθηκε"),
@@ -741,8 +758,8 @@ const Booking = () => {
       return;
     }
 
-    if (isPartyBooking ? departureTime !== resolvedPartyEventTime : availableDepartureTimes.length === 0 || !availableDepartureTimes.includes(departureTime)) {
-      if (isPartyBooking && (!resolvedPartyEventDate || !resolvedPartyEventTime)) {
+    if (isPartyBooking) {
+      if (!resolvedPartyEventDate || !resolvedPartyEventTime) {
         toast({
           title: tl("Party date missing", "Λείπει η ημερομηνία πάρτι"),
           description: tl("The owner needs to set the original party date and time before this booking can continue.", "Ο ιδιοκτήτης πρέπει να έχει ορίσει την αρχική ημερομηνία και ώρα πάρτι πριν συνεχίσει αυτή η κράτηση."),
@@ -750,12 +767,14 @@ const Booking = () => {
         });
         return;
       }
-
+    } else if (availableDepartureTimes.length === 0 || !availableDepartureTimes.includes(departureTime)) {
       navigate(
         `/booking-closed?boat=${encodeURIComponent(boat.name)}&date=${encodeURIComponent(bookingDateString)}&reason=${encodeURIComponent("slot-unavailable")}`,
       );
       return;
     }
+
+    const effectiveDepartureTime = isPartyBooking ? resolvedPartyEventTime : departureTime;
 
     if (isPartyBooking && ticketMaxPeople > 0 && ticketsRemaining <= 0) {
       toast({
@@ -797,48 +816,74 @@ const Booking = () => {
     }
 
     if (paymentMethod === "stripe") {
+      setIsConfirming(true);
+      let redirectedToCheckout = false;
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
 
-        const checkoutResponse = await fetch(stripeCheckoutEndpoint, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          },
+        const checkoutAbortController = new AbortController();
+        let checkoutTimeoutId: number | null = window.setTimeout(() => {
+          checkoutAbortController.abort();
+        }, 15000);
+        let checkoutRaceTimeoutId: number | null = null;
 
-          body: JSON.stringify({
-            boatId: boat.id,
-            boatName: boat.name,
-            customerEmail: customerEmail.trim().toLowerCase(),
-            customerId: sessionUser?.id,
-            bookingDate: bookingDateString,
-            departureTime,
-            packageHours: bookingDurationHours,
-            guests: guestCount,
-            isPartyBooking,
-            preDiscountTotal,
-            totalPrice: estimatedTotal,
-            amountDueNow,
-            paymentPlan: paymentPlan ?? "full",
-            depositAmount,
-            successUrl: `${window.location.origin}/booking-confirmed`,
-            cancelUrl: window.location.href,
-            ...(isPartyBooking ? {
-              partyEventDate: resolvedPartyEventDate || undefined,
-              partyEventTime: resolvedPartyEventTime || undefined,
-            } : {}),
-            ...(isPartyBooking && selectedPartyTier && boat.partyTiers
-              ? {
-                  partyTierSelected: selectedPartyTier,
-                  partyTierPrice:
-                    boat.partyTiers.find((tier) => tier.name === selectedPartyTier)?.price ?? 0,
-                }
-              : {}),
-          }),
-        });
+        let checkoutResponse: Response;
+        try {
+          const fetchPromise = fetch(stripeCheckoutEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            },
+            signal: checkoutAbortController.signal,
+            body: JSON.stringify({
+              boatId: boat.id,
+              boatName: boat.name,
+              customerEmail: customerEmail.trim().toLowerCase(),
+              customerId: sessionUser?.id,
+              bookingDate: bookingDateString,
+              departureTime: effectiveDepartureTime,
+              packageHours: bookingDurationHours,
+              guests: guestCount,
+              isPartyBooking,
+              preDiscountTotal,
+              totalPrice: estimatedTotal,
+              amountDueNow,
+              paymentPlan: paymentPlan ?? "full",
+              depositAmount,
+              successUrl: `${window.location.origin}/booking-confirmed`,
+              cancelUrl: window.location.href,
+              ...(isPartyBooking ? {
+                partyEventDate: resolvedPartyEventDate || undefined,
+                partyEventTime: resolvedPartyEventTime || undefined,
+              } : {}),
+              ...(isPartyBooking && selectedPartyTier && boat.partyTiers
+                ? {
+                    partyTierSelected: selectedPartyTier,
+                    partyTierPrice:
+                      boat.partyTiers.find((tier) => tier.name === selectedPartyTier)?.price ?? 0,
+                  }
+                : {}),
+            }),
+          });
+
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            checkoutRaceTimeoutId = window.setTimeout(() => reject(new Error("Checkout request timed out after 15 seconds. Please try again.")), 15500);
+          });
+
+          checkoutResponse = await Promise.race([fetchPromise, timeoutPromise]);
+        } finally {
+          if (checkoutTimeoutId !== null) {
+            window.clearTimeout(checkoutTimeoutId);
+            checkoutTimeoutId = null;
+          }
+          if (checkoutRaceTimeoutId !== null) {
+            window.clearTimeout(checkoutRaceTimeoutId);
+            checkoutRaceTimeoutId = null;
+          }
+        }
 
         const checkoutRaw = await checkoutResponse.text();
         let checkoutPayload: { sessionId?: string; checkoutUrl?: string; error?: string; details?: string } = {};
@@ -857,6 +902,7 @@ const Booking = () => {
 
         const checkoutUrl = String(checkoutPayload.checkoutUrl ?? "").trim();
         if (checkoutUrl) {
+          redirectedToCheckout = true;
           window.location.assign(checkoutUrl);
           return;
         }
@@ -865,7 +911,11 @@ const Booking = () => {
 
         return;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Checkout failed";
+        const message = error instanceof Error
+          ? (error.name === "AbortError"
+              ? "Checkout request timed out after 15 seconds. Please try again."
+              : error.message)
+          : "Checkout failed";
         const normalized = message.toLowerCase();
         const isConfigOrNetworkIssue =
           normalized.includes("fetch failed") ||
@@ -882,6 +932,10 @@ const Booking = () => {
           variant: "destructive",
         });
         return;
+      } finally {
+        if (!redirectedToCheckout) {
+          setIsConfirming(false);
+        }
       }
     }
 
@@ -899,7 +953,7 @@ const Booking = () => {
         packageHours: bookingDurationHours,
         guests: ticketQuantity,
         date: bookingDateString,
-        departureTime,
+        departureTime: effectiveDepartureTime,
         departureMarina: boat.departureMarina,
         totalPrice: estimatedTotal,
         paymentMethod,
@@ -1054,10 +1108,28 @@ const Booking = () => {
                   </div>
                   <Input value={boatName} readOnly />
                   {isPartyBooking ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Event date</span>
+                        <span className="font-semibold text-foreground">
+                          {resolvedPartyEventDate
+                            ? (boat?.partyEventDate
+                                ? format(parseISO(boat.partyEventDate), "EEEE, d MMM yyyy")
+                                : resolvedPartyEventDate)
+                            : "Not set"}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Start time</span>
+                        <span className="font-semibold text-foreground">{resolvedPartyEventTime || "Not set"}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                  {isPartyBooking ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-foreground space-y-2">
                       <p className="font-semibold">Ticket-based party booking</p>
                       <p className="text-muted-foreground">
-                        Choose the date and guest list. Your ticket price stays tied to the party booking, not fuel or skipper options.
+                        Choose your guest list. Your ticket price stays tied to the party booking, not fuel or skipper options.
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                         <div className="rounded-xl bg-background border border-amber-200 p-3">
@@ -1191,6 +1263,7 @@ const Booking = () => {
                   </div>
                 </div>
 
+                {!isPartyBooking ? (
                 <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-5">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
@@ -1200,9 +1273,9 @@ const Booking = () => {
                     <Badge variant="outline">Schedule</Badge>
                   </div>
 
-                  <div className="grid grid-cols-1 xl:grid-cols-[1fr_220px] gap-5 items-start">
+                  <div className="grid grid-cols-1 gap-5 items-start">
                     { !isPartyBooking ? (
-                      <>
+                      <div className="space-y-5">
                         {/* Quick date shortcuts */}
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-xs text-muted-foreground shrink-0">Jump to a good option:</p>
@@ -1310,7 +1383,7 @@ const Booking = () => {
                             </span>
                           </div>
                         </div>
-                      </>
+                      </div>
                     ) : (
                       <div className="rounded-3xl border border-amber-200 p-4 bg-amber-50 space-y-3">
                         <div>
@@ -1348,25 +1421,72 @@ const Booking = () => {
                             <Clock className="h-3.5 w-3.5 text-aegean" />
                             Departure time
                           </p>
-                          <div className="grid grid-cols-3 gap-1.5">
-                            {(availableDepartureTimes.length > 0 ? availableDepartureTimes : ["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"]).map((slot, index) => (
-                              <button
-                                key={slot}
-                                type="button"
-                                disabled={!selectedDate || !availableDepartureTimes.includes(slot)}
-                                onClick={() => setDepartureTime(slot)}
-                                className={`text-xs rounded-xl border py-2 transition-colors ${
-                                  departureTime === slot
-                                    ? "border-aegean bg-aegean/10 text-aegean font-semibold"
-                                    : selectedDate && availableDepartureTimes.includes(slot)
-                                      ? "border-border hover:border-aegean/50 text-muted-foreground hover:text-foreground"
-                                      : "border-border text-muted-foreground/40 cursor-not-allowed"
-                                }`}
-                              >
-                                {slot}{index === 0 && availableDepartureTimes.length > 0 ? " ★" : ""}
-                              </button>
-                            ))}
-                          </div>
+                          {sortedDepartureTimes.length > 0 ? (
+                            <div className="space-y-2.5">
+                              {recommendedDepartureTimes.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-aegean">Recommended</p>
+                                  <div className="grid grid-cols-3 gap-1.5">
+                                    {recommendedDepartureTimes.map((slot) => (
+                                      <button
+                                        key={`recommended-${slot}`}
+                                        type="button"
+                                        disabled={!selectedDate || !availableDepartureTimes.includes(slot)}
+                                        onClick={() => setDepartureTime(slot)}
+                                        className={`text-xs rounded-xl border py-2 transition-colors ${
+                                          departureTime === slot
+                                            ? "border-aegean bg-aegean/10 text-aegean font-semibold"
+                                            : selectedDate && availableDepartureTimes.includes(slot)
+                                              ? "border-border hover:border-aegean/50 text-muted-foreground hover:text-foreground"
+                                              : "border-border text-muted-foreground/40 cursor-not-allowed"
+                                        }`}
+                                      >
+                                        {slot} ★
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {otherDepartureTimes.length > 0 ? (
+                                <div className="space-y-1.5">
+                                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Other times</p>
+                                  <div className="grid grid-cols-3 gap-1.5">
+                                    {otherDepartureTimes.map((slot) => (
+                                      <button
+                                        key={`other-${slot}`}
+                                        type="button"
+                                        disabled={!selectedDate || !availableDepartureTimes.includes(slot)}
+                                        onClick={() => setDepartureTime(slot)}
+                                        className={`text-xs rounded-xl border py-2 transition-colors ${
+                                          departureTime === slot
+                                            ? "border-aegean bg-aegean/10 text-aegean font-semibold"
+                                            : selectedDate && availableDepartureTimes.includes(slot)
+                                              ? "border-border hover:border-aegean/50 text-muted-foreground hover:text-foreground"
+                                              : "border-border text-muted-foreground/40 cursor-not-allowed"
+                                        }`}
+                                      >
+                                        {slot}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {["07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map((slot) => (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled
+                                  className="text-xs rounded-xl border border-border py-2 text-muted-foreground/40 cursor-not-allowed"
+                                >
+                                  {slot}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {isLoadingDepartureTimes
                               ? "Checking free departure windows…"
@@ -1479,10 +1599,11 @@ const Booking = () => {
                     )}
                   </div>
                 </div>
+                ) : null}
                 </>
                 ) : null}
 
-                {bookingStep === 2 ? (
+                {bookingStep === 2 && !isPartyBooking ? (
                 <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Sector 3: Guest details" : "Sector 3: Customer details"}</p>
@@ -1505,7 +1626,7 @@ const Booking = () => {
                 </div>
                 ) : null}
 
-                {bookingStep === 2 ? (
+                {bookingStep === 2 || isPartyBooking ? (
                 <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Sector 4: Party setup" : "Sector 4: Experience and add-ons"}</p>
@@ -1725,38 +1846,6 @@ const Booking = () => {
                   </div>
                 ) : null}
 
-                {isPartyBooking ? (
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-foreground">Sector 3: Review party booking</p>
-                      <Badge variant="outline">Ticket flow</Badge>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-200 bg-background p-4 space-y-2 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Ticket price</span>
-                        <span className="text-foreground font-medium">{ticketPricePerPerson > 0 ? formatEuroAmount(ticketPricePerPerson) : "Contact for price"}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Tickets selected</span>
-                        <span className="text-foreground font-medium">{ticketQuantity}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Total</span>
-                        <span className="text-foreground font-medium">{ticketPricePerPerson > 0 ? formatEuroAmount(ticketSubtotal) : "Contact for price"}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Payment</span>
-                        <span className="text-foreground font-medium">Full ticket payment</span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      Party bookings skip fuel and skipper pricing. Confirming will issue the ticket list and notify the owner.
-                    </p>
-                  </div>
-                ) : null}
-
                 {bookingStep === 4 && !isPartyBooking ? (
                   <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-4">
                     <div className="flex items-center justify-between">
@@ -1869,12 +1958,30 @@ const Booking = () => {
                   </div>
 
                   <div className="rounded-2xl border border-border bg-muted/10 p-4">
-                    <p className="text-sm font-semibold text-foreground">Step 2: Estimated total</p>
-                    <p className="text-sm text-muted-foreground">Estimated total</p>
-                    <p className="text-3xl font-heading font-bold text-foreground">€{estimatedTotal}</p>
+                    {isPartyBooking ? (
+                      <>
+                        <p className="text-sm font-semibold text-foreground">Step 2: Start date and time</p>
+                        <div className="space-y-2 pt-2 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Start date</span>
+                            <span className="text-foreground font-medium">{boat?.partyEventDate ? format(parseISO(boat.partyEventDate), "d MMM yyyy") : resolvedPartyEventDate || "Not set"}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Start time</span>
+                            <span className="text-foreground font-medium">{resolvedPartyEventTime || "Not set"}</span>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-foreground">Step 2: Estimated total</p>
+                        <p className="text-sm text-muted-foreground">Estimated total</p>
+                        <p className="text-3xl font-heading font-bold text-foreground">€{estimatedTotal}</p>
+                      </>
+                    )}
                   </div>
 
-                  <p className="text-xs text-muted-foreground">{isPartyBooking ? "Ticket payment goes through Stripe Checkout. Platform retains 20% commission, 80% goes directly to boat owner." : "Step 3: Your payment goes through Stripe Checkout. Platform retains 20% commission, 80% goes directly to boat owner."}</p>
+                  <p className="text-xs text-muted-foreground">Payments are processed securely via Stripe Checkout.</p>
 
                   <div className="rounded-2xl border border-border bg-muted/10 p-4 space-y-2 text-sm">
                     <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Step 3: Ticket snapshot" : "Step 4: Booking snapshot"}</p>
@@ -1885,11 +1992,11 @@ const Booking = () => {
                     {isPartyBooking ? (
                       <>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Event Date</span>
+                          <span className="text-muted-foreground">Start date</span>
                           <span className="text-foreground font-medium">{boat?.partyEventDate ? format(parseISO(boat.partyEventDate), "d MMM yyyy") : resolvedPartyEventDate || "Not set"}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Event Time</span>
+                          <span className="text-muted-foreground">Start time</span>
                           <span className="text-foreground font-medium">{resolvedPartyEventTime || "Not set"}</span>
                         </div>
                       </>
@@ -1930,9 +2037,9 @@ const Booking = () => {
 
                   {bookingStep === finalBookingStep ? <p className="text-xs text-muted-foreground">{isPartyBooking ? "Step 5: Confirm ticket booking workflow." : "Step 8: Confirm and send booking workflow."}</p> : null}
                   {bookingStep === finalBookingStep ? (
-                    <Button className="w-full bg-gradient-accent text-accent-foreground gap-2" onClick={handleConfirmBooking}>
-                      <CreditCard className="h-4 w-4" />
-                      Confirm booking (€{amountDueNow} now)
+                    <Button className="w-full bg-gradient-accent text-accent-foreground gap-2" onClick={handleConfirmBooking} disabled={isConfirming}>
+                      {isConfirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                      {isConfirming ? "Creating secure checkout..." : `Confirm booking (€${amountDueNow} now)`}
                     </Button>
                   ) : null}
                   <Button asChild variant="outline" className="w-full">

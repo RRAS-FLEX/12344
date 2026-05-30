@@ -6,10 +6,25 @@ export interface CustomerHistoryItem {
   boatName: string;
   ownerName: string;
   packageLabel: string;
+  createdAt: string;
   startDate: string;
+  departureTime: string;
+  departureMarina: string;
   status: string;
   totalPrice: number;
+  paymentMethod: string;
+  paymentPlan: string;
+  amountDueNow: number;
+  depositAmount: number;
+  platformCommission: number;
+  ownerPayout: number;
+  extras: string[];
+  notes: string;
   hasReview: boolean;
+  reviewRating: number | null;
+  reviewTitle: string;
+  reviewComment: string;
+  reviewCreatedAt: string;
 }
 
 export interface OwnerSalesHistoryItem {
@@ -18,9 +33,25 @@ export interface OwnerSalesHistoryItem {
   boatName: string;
   customerName: string;
   packageLabel: string;
+  createdAt: string;
   startDate: string;
+  departureTime: string;
+  departureMarina: string;
   status: string;
   totalPrice: number;
+  paymentMethod: string;
+  paymentPlan: string;
+  amountDueNow: number;
+  depositAmount: number;
+  platformCommission: number;
+  ownerPayout: number;
+  extras: string[];
+  notes: string;
+  hasReview: boolean;
+  reviewRating: number | null;
+  reviewTitle: string;
+  reviewComment: string;
+  reviewCreatedAt: string;
 }
 
 export interface CancelBookingResult {
@@ -44,12 +75,12 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
   const [bookingsResult, reviewsResult] = await Promise.all([
     (supabase as any)
       .from("bookings")
-      .select("id, boat_id, boat_name, owner_name, package_label, start_date, status, total_price")
+      .select("id, boat_id, boat_name, owner_name, package_label, created_at, start_date, departure_time, departure_marina, status, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, extras, notes")
       .eq("customer_id", session.user.id)
       .order("start_date", { ascending: false }),
     (supabase as any)
       .from("reviews")
-      .select("booking_id")
+      .select("booking_id, rating, title, comment, created_at")
       .eq("customer_id", session.user.id),
   ]);
 
@@ -61,11 +92,14 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
     throw new Error(reviewsResult.error.message || "Failed to load review history");
   }
 
-  const reviewIds = new Set(
-    Array.isArray(reviewsResult.data)
-      ? reviewsResult.data.map((review: any) => review.booking_id).filter(Boolean)
-      : [],
-  );
+  const reviewsByBookingId = new Map<string, any>();
+  if (Array.isArray(reviewsResult.data)) {
+    for (const review of reviewsResult.data) {
+      const bookingId = String((review as any)?.booking_id ?? "").trim();
+      if (!bookingId) continue;
+      reviewsByBookingId.set(bookingId, review);
+    }
+  }
 
   return Array.isArray(bookingsResult.data)
     ? bookingsResult.data.map((booking: any) => ({
@@ -74,10 +108,27 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
         boatName: booking.boat_name ?? "Boat",
         ownerName: booking.owner_name ?? "Owner",
         packageLabel: booking.package_label ?? "Custom booking",
+        createdAt: booking.created_at ?? booking.start_date,
         startDate: booking.start_date,
+        departureTime: booking.departure_time ?? "",
+        departureMarina: booking.departure_marina ?? "",
         status: booking.status ?? "confirmed",
         totalPrice: Number(booking.total_price ?? 0),
-        hasReview: reviewIds.has(booking.id),
+        paymentMethod: booking.payment_method ?? "stripe",
+        paymentPlan: booking.payment_plan ?? "full",
+        amountDueNow: Number(booking.amount_due_now ?? booking.total_price ?? 0),
+        depositAmount: Number(booking.deposit_amount ?? 0),
+        platformCommission: Number(booking.platform_commission ?? 0),
+        ownerPayout: Number(booking.owner_payout ?? 0),
+        extras: Array.isArray(booking.extras) ? booking.extras.map((entry: unknown) => String(entry)) : [],
+        notes: booking.notes ?? "",
+        hasReview: reviewsByBookingId.has(booking.id),
+        reviewRating: reviewsByBookingId.has(booking.id)
+          ? Number(reviewsByBookingId.get(booking.id)?.rating ?? 0)
+          : null,
+        reviewTitle: String(reviewsByBookingId.get(booking.id)?.title ?? ""),
+        reviewComment: String(reviewsByBookingId.get(booking.id)?.comment ?? ""),
+        reviewCreatedAt: String(reviewsByBookingId.get(booking.id)?.created_at ?? ""),
       }))
     : [];
 };
@@ -112,12 +163,36 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
 
   const { data: bookingsData, error: bookingsError } = await (supabase as any)
     .from("bookings")
-    .select("id, boat_id, boat_name, customer_name, package_label, start_date, status, total_price")
+    .select("id, boat_id, boat_name, customer_name, package_label, created_at, start_date, departure_time, departure_marina, status, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, extras, notes")
     .in("boat_id", boatIds)
     .order("start_date", { ascending: false });
 
   if (bookingsError) {
     throw new Error(bookingsError.message || "Failed to load owner sales history");
+  }
+
+  const bookingIds = Array.isArray(bookingsData)
+    ? bookingsData.map((booking: any) => booking.id).filter(Boolean)
+    : [];
+
+  const reviewsByBookingId = new Map<string, any>();
+  if (bookingIds.length > 0) {
+    const { data: reviewsData, error: reviewsError } = await (supabase as any)
+      .from("reviews")
+      .select("booking_id, rating, title, comment, created_at")
+      .in("booking_id", bookingIds);
+
+    if (reviewsError) {
+      throw new Error(reviewsError.message || "Failed to load sales review history");
+    }
+
+    if (Array.isArray(reviewsData)) {
+      for (const review of reviewsData) {
+        const bookingId = String((review as any)?.booking_id ?? "").trim();
+        if (!bookingId) continue;
+        reviewsByBookingId.set(bookingId, review);
+      }
+    }
   }
 
   return Array.isArray(bookingsData)
@@ -127,9 +202,27 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
         boatName: booking.boat_name ?? "Boat",
         customerName: booking.customer_name ?? "Guest",
         packageLabel: booking.package_label ?? "Custom booking",
+        createdAt: booking.created_at ?? booking.start_date,
         startDate: booking.start_date,
+        departureTime: booking.departure_time ?? "",
+        departureMarina: booking.departure_marina ?? "",
         status: booking.status ?? "confirmed",
         totalPrice: Number(booking.total_price ?? 0),
+        paymentMethod: booking.payment_method ?? "stripe",
+        paymentPlan: booking.payment_plan ?? "full",
+        amountDueNow: Number(booking.amount_due_now ?? booking.total_price ?? 0),
+        depositAmount: Number(booking.deposit_amount ?? 0),
+        platformCommission: Number(booking.platform_commission ?? 0),
+        ownerPayout: Number(booking.owner_payout ?? 0),
+        extras: Array.isArray(booking.extras) ? booking.extras.map((entry: unknown) => String(entry)) : [],
+        notes: booking.notes ?? "",
+        hasReview: reviewsByBookingId.has(booking.id),
+        reviewRating: reviewsByBookingId.has(booking.id)
+          ? Number(reviewsByBookingId.get(booking.id)?.rating ?? 0)
+          : null,
+        reviewTitle: String(reviewsByBookingId.get(booking.id)?.title ?? ""),
+        reviewComment: String(reviewsByBookingId.get(booking.id)?.comment ?? ""),
+        reviewCreatedAt: String(reviewsByBookingId.get(booking.id)?.created_at ?? ""),
       }))
     : [];
 };

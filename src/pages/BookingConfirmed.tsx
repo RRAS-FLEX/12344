@@ -16,6 +16,11 @@ type ResolvedBooking = {
   date: string;
   departure: string;
   amount: number;
+  paymentVerified?: boolean;
+  bookingStatus?: string;
+  stripePaymentStatus?: string;
+  stripeCheckoutStatus?: string;
+  stripeCheckoutUrl?: string;
   ownerNotified: boolean;
   emailQueued: boolean;
   bookingType?: "party" | "rental";
@@ -74,6 +79,7 @@ const BookingConfirmed = () => {
 
         if (!session?.access_token) {
           if (!cancelled) {
+            setError("Sign in is required to verify Stripe payment status.");
             setIsLoading(false);
           }
           return;
@@ -132,6 +138,20 @@ const BookingConfirmed = () => {
   const effectiveEndTime = resolvedBooking?.endTime;
   const hasPartyTicket = Boolean(effectivePartyTicketCode && effectivePartyTicketStatus === "issued");
   const isPartyBooking = effectiveBookingType === "party";
+  const paymentVerified = Boolean(stripeSessionId) && Boolean(resolvedBooking?.paymentVerified);
+  const stripeCheckoutUrl = resolvedBooking?.stripeCheckoutUrl || "";
+  const stripePaymentStatus = resolvedBooking?.stripePaymentStatus || "unknown";
+
+  const pageTitle = paymentVerified
+    ? (isPartyBooking ? "Party Booking Confirmed 🎉" : "Booking Confirmed")
+    : "Payment not completed";
+  const pageSummary = paymentVerified
+    ? (isPartyBooking
+      ? "Your party event is confirmed! Your tickets are ready. Show your ticket code at check-in."
+      : "Your trip is secured. We lock this slot immediately to avoid overlaps and keep your booking reliable.")
+    : (!stripeSessionId
+      ? "No Stripe payment session was found. A booking is confirmed only after Stripe returns a paid session."
+      : "Stripe has not confirmed a successful payment for this booking yet. Going back from checkout does not complete payment.");
 
   return (
     <div className="min-h-screen bg-background">
@@ -144,23 +164,30 @@ const BookingConfirmed = () => {
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <CardTitle className="flex items-center gap-2">
                   <CalendarCheck2 className="h-5 w-5 text-aegean" />
-                  {isPartyBooking ? "Party Booking Confirmed 🎉" : "Booking Confirmed"}
+                  {pageTitle}
                 </CardTitle>
-                <Badge className={isPartyBooking ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-aegean/10 text-aegean border-aegean/30"}>
-                  {isPartyBooking ? "Party Event" : "Rental"} • {effectiveBookingId || "pending"}
+                <Badge className={paymentVerified ? (isPartyBooking ? "bg-amber-100 text-amber-900 border-amber-300" : "bg-aegean/10 text-aegean border-aegean/30") : "bg-rose-100 text-rose-900 border-rose-300"}>
+                  {paymentVerified ? (isPartyBooking ? "Party Event" : "Rental") : "Awaiting payment"} • {effectiveBookingId || "pending"}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-5">
               <p className="text-muted-foreground">
-                {isPartyBooking 
-                  ? "Your party event is confirmed! Your tickets are ready. Show your ticket code at check-in." 
-                  : "Your trip is secured. We lock this slot immediately to avoid overlaps and keep your booking reliable."}
+                {pageSummary}
               </p>
 
               {isLoading ? <BookingConfirmationSkeleton /> : null}
               {error ? (
                 <p className="text-xs text-destructive">{error}</p>
+              ) : null}
+
+              {!paymentVerified ? (
+                <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900 space-y-2">
+                  <p className="font-semibold">Payment is still pending</p>
+                  <p>
+                    Stripe status: {stripePaymentStatus}. This booking will only become confirmed after Stripe reports payment as paid.
+                  </p>
+                </div>
               ) : null}
 
               {/* Booking Details Card */}
@@ -216,7 +243,7 @@ const BookingConfirmed = () => {
               </div>
 
               {/* Party Tickets Section */}
-              {hasPartyTicket ? (
+              {paymentVerified && hasPartyTicket ? (
                 <div className="rounded-2xl border border-amber-400/40 bg-amber-50 p-4 text-sm text-foreground space-y-3">
                   <p className="font-semibold text-amber-900">🎟️ Party Tickets Issued</p>
                   <div className="space-y-2">
@@ -242,7 +269,7 @@ const BookingConfirmed = () => {
               ) : null}
 
               {/* Party Tier Section */}
-              {isPartyBooking && effectivePartyTierSelected ? (
+              {paymentVerified && isPartyBooking && effectivePartyTierSelected ? (
                 <div className="rounded-2xl border border-amber-300/50 bg-amber-50 p-4 text-sm text-foreground space-y-3">
                   <p className="font-semibold text-amber-900">✨ Party Tier Selected</p>
                   <div className="space-y-2">
@@ -306,14 +333,31 @@ const BookingConfirmed = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Button asChild>
-                  <Link to="/history">View My Bookings</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link to="/boats">{isPartyBooking ? "Browse More Parties" : "Book Another Trip"}</Link>
-                </Button>
-              </div>
+              {paymentVerified ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button asChild>
+                    <Link to="/history">View My Bookings</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to="/boats">{isPartyBooking ? "Browse More Parties" : "Book Another Trip"}</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {stripeSessionId && stripeCheckoutUrl ? (
+                    <Button asChild>
+                      <a href={stripeCheckoutUrl}>Continue payment in Stripe</a>
+                    </Button>
+                  ) : (
+                    <Button asChild>
+                      <Link to="/booking">Back to booking</Link>
+                    </Button>
+                  )}
+                  <Button asChild variant="outline">
+                    <Link to="/history">Open booking history</Link>
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { getOwnerBoats, deleteOwnerBoat, updateOwnerBoat, OwnerBoat } from "../../lib/owner-dashboard";
 import { buildBoatDetailsPath } from "@/lib/boats";
+import { useToast } from "@/hooks/use-toast";
 
 interface BoatsManagementProps {
   onAddBoat: () => void;
@@ -16,6 +17,7 @@ const BoatsManagement = ({ onAddBoat, onEditBoat }: BoatsManagementProps) => {
   const [boats, setBoats] = useState<OwnerBoat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const loadBoats = async () => {
@@ -51,8 +53,12 @@ const BoatsManagement = ({ onAddBoat, onEditBoat }: BoatsManagementProps) => {
           currentBoats.map((b) => (b.id === boat.id ? { ...b, status: nextStatus } : b)),
         );
       }
-    } catch {
-      // Silently ignore; in real UI we might show a toast.
+    } catch (error) {
+      toast({
+        title: "Could not change boat status",
+        description: error instanceof Error ? error.message : "Add at least one package before making this boat active.",
+        variant: "destructive",
+      });
     }
   };
 

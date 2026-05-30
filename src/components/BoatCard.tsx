@@ -6,6 +6,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { buildBoatDetailsPath } from "@/lib/boats";
 import type { BoatOwner } from "@/lib/boats";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import RatingComparisonPill from "@/components/ratings/RatingComparisonPill";
 
 interface BoatCardProps {
   id?: string;
@@ -186,9 +187,14 @@ const BoatCard = ({
                 {favoriteCount}
               </span>
             ) : null}
-            {typeof reviewCount === "number" ? (
-              <span className="text-xs">{reviewCount} reviews</span>
-            ) : null}
+          </div>
+          <div className="mt-2">
+            <RatingComparisonPill
+              rating={rating}
+              reviewCount={reviewCount}
+              benchmarkRating={4.6}
+              label="fleet"
+            />
           </div>
         </div>
         

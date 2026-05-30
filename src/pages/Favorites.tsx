@@ -6,16 +6,16 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { useFavorites } from "@/hooks/useFavorites";
 import { buildBoatDetailsPath } from "@/lib/boats";
-import { supabase } from "@/lib/supabase";
 import { resolveStorageImage } from "@/lib/storage-public";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { withRetry } from "@/lib/retry";
+import { getBoats } from "@/lib/boats";
 
 type FavoriteBoat = {
   id: string;
   name: string;
   location: string;
-  price_per_day: number;
+  displayPrice: number | null;
   images: string | null;
   rating: number;
 };
@@ -42,16 +42,17 @@ const Favorites = () => {
 
     try {
       const data = await withRetry(async () => {
-        const { data: nextData, error } = await (supabase as any)
-          .from("boats")
-          .select("id, name, location, price_per_day, images, rating")
-          .in("id", favoriteIds);
-
-        if (error) {
-          throw new Error(error.message || "Unable to load favorites");
-        }
-
-        return (nextData as FavoriteBoat[]) ?? [];
+        const allBoats = await getBoats();
+        return allBoats
+          .filter((boat) => favoriteIds.includes(boat.id))
+          .map((boat) => ({
+            id: boat.id,
+            name: boat.name,
+            location: boat.location,
+            displayPrice: boat.pricePerDay > 0 ? boat.pricePerDay : null,
+            images: boat.images.length > 0 ? boat.images[0] : boat.image,
+            rating: boat.rating,
+          }));
       }, { retries: 2, initialDelayMs: 220 });
       setBoats(data);
 
@@ -152,7 +153,7 @@ const Favorites = () => {
                     <p className="text-sm text-muted-foreground mb-3">{boat.location}</p>
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="text-lg font-heading font-bold text-foreground">€{boat.price_per_day}</span>
+                        <span className="text-lg font-heading font-bold text-foreground">{boat.displayPrice != null ? `€${boat.displayPrice}` : (language === "el" ? "Επικοινωνία για τιμή" : "Contact for price")}</span>
                         <span className="text-sm text-muted-foreground"> / day</span>
                       </div>
                       <Link

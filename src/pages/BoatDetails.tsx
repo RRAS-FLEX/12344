@@ -21,6 +21,7 @@ import { trackBoatViewed, trackBookingStarted } from "@/lib/analytics";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { withRetry } from "@/lib/retry";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import RatingComparisonPill from "@/components/ratings/RatingComparisonPill";
 
 const BoatDetails = () => {
   const { tl } = useLanguage();
@@ -587,10 +588,12 @@ const BoatDetails = () => {
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <CardTitle>{tl("Guest reviews", "Αξιολογήσεις επισκεπτών")}</CardTitle>
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                      {reviewStats.averageRating ? reviewStats.averageRating.toFixed(1) : boat.rating} ({reviewStats.total})
-                    </Badge>
+                    <RatingComparisonPill
+                      rating={reviewStats.averageRating || boat.rating}
+                      reviewCount={reviewStats.total}
+                      benchmarkRating={4.6}
+                      label="fleet"
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">

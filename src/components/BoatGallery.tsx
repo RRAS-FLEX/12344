@@ -2,14 +2,15 @@ import { useEffect, useState } from "react";
 
 import { BoatsGridSkeleton } from "@/components/loading/LoadingUI";
 import { fetchJsonFromEndpoints, resolveStripeCheckoutEndpoints } from "@/lib/api-endpoints";
+import { getBoats } from "@/lib/boats";
 import { supabase } from "@/lib/supabase";
 
 type BoatRecord = {
   id: string;
   name: string;
   description: string | null;
-  price_per_day: number | null;
-  image_url: string | null;
+  displayPrice: number | null;
+  image: string | null;
 };
 
 type BoatCardProps = {
@@ -19,7 +20,7 @@ type BoatCardProps = {
 function BoatCard({ boat }: BoatCardProps) {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const priceLabel = typeof boat.price_per_day === "number" ? boat.price_per_day.toLocaleString() : "Contact for price";
+  const priceLabel = typeof boat.displayPrice === "number" ? boat.displayPrice.toLocaleString() : "Contact for price";
 
   const handleBookNow = async () => {
     setActionError(null);
@@ -60,9 +61,9 @@ function BoatCard({ boat }: BoatCardProps) {
   return (
     <article className="overflow-hidden rounded-3xl border border-border/60 bg-card shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-lg">
       <div className="aspect-[4/3] overflow-hidden bg-muted">
-        {boat.image_url ? (
+        {boat.image ? (
           <img
-            src={boat.image_url}
+            src={boat.image}
             alt={boat.name}
             className="h-full w-full object-cover"
             loading="lazy"
@@ -115,24 +116,28 @@ export default function BoatGallery() {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from("boats")
-        .select("id, name, description, price_per_day, image_url")
-        .order("name", { ascending: true });
+      try {
+        const data = await getBoats();
+        if (!isMounted) return;
 
-      if (!isMounted) {
-        return;
-      }
-
-      if (fetchError) {
-        setError(fetchError.message);
+        setBoats(
+          data.map((boat) => ({
+            id: boat.id,
+            name: boat.name,
+            description: boat.description,
+            displayPrice: boat.pricePerDay > 0 ? boat.pricePerDay : null,
+            image: boat.image || null,
+          })),
+        );
+      } catch (fetchError) {
+        if (!isMounted) return;
+        setError(fetchError instanceof Error ? fetchError.message : "Unable to load boats");
         setBoats([]);
-        setLoading(false);
-        return;
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setBoats((data as BoatRecord[]) ?? []);
-      setLoading(false);
     };
 
     void fetchBoats();

@@ -5,6 +5,7 @@ import { Anchor, Filter, LayoutGrid, MapPin, Rows3, Sparkles, Users, Search } fr
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BoatCard from "@/components/BoatCard";
+import RatingComparisonPill from "@/components/ratings/RatingComparisonPill";
 import { BoatsGridSkeleton } from "@/components/loading/LoadingUI";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,10 @@ type BoatSectorFilter = "all" | "rentals" | "parties" | "watersports";
 const isWatersportsBoat = (boat: Boat) => boat.type === "watersports";
 const isPartyBoat = (boat: Boat) => boat.partyReady === true;
 const isRentalBoat = (boat: Boat) => !isWatersportsBoat(boat) && !isPartyBoat(boat);
+const averageRating = (boats: Boat[]) => {
+  if (boats.length === 0) return 0;
+  return boats.reduce((sum, boat) => sum + Number(boat.rating || 0), 0) / boats.length;
+};
 
 const Boats = () => {
   const { tl } = useLanguage();
@@ -547,8 +552,16 @@ const Boats = () => {
                   section.boats.length > 0 ? (
                     <AccordionItem key={section.id} value={section.id} className="border-b border-border/60">
                       <AccordionTrigger className="hover:no-underline py-4">
-                        <div className="space-y-1 text-left">
-                          <h2 className="text-xl font-semibold text-foreground">{section.title}</h2>
+                        <div className="w-full space-y-2 text-left">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h2 className="text-xl font-semibold text-foreground">{section.title}</h2>
+                            <RatingComparisonPill
+                              rating={averageRating(section.boats)}
+                              reviewCount={section.boats.length}
+                              benchmarkRating={4.6}
+                              label={tl("fleet", "στόλο")}
+                            />
+                          </div>
                           <p className="text-sm text-muted-foreground">{section.subtitle} • {section.boats.length}</p>
                         </div>
                       </AccordionTrigger>

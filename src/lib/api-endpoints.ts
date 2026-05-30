@@ -60,6 +60,12 @@ export const resolveBookingLookupEndpoints = (apiBaseUrl = (import.meta.env.VITE
 export const resolveBoatsSectorEndpoints = (sector: string, apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim(), netlifyFunctionPath?: string) =>
   buildEndpointCandidates(`/api/boats/${sector}`, apiBaseUrl, netlifyFunctionPath);
 
+export const resolveBoatImageSignEndpoints = (apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
+  buildEndpointCandidates("/api/storage/boat-images/sign", apiBaseUrl);
+
+export const resolveDestinationImageSignEndpoints = (apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
+  buildEndpointCandidates("/api/storage/destination-images/sign", apiBaseUrl);
+
 const buildQueryString = (params?: Record<string, string | number | undefined | null>) => {
   if (!params) return "";
   const parts: string[] = [];

@@ -1,5 +1,6 @@
 ﻿import { supabase } from "@/lib/supabase";
-import { resolveStorageImage } from "@/lib/storage-public";
+import { fetchJsonFromEndpoints, resolveDestinationImageSignEndpoints } from "@/lib/api-endpoints";
+import { parseStorageReference, resolveStorageImage } from "@/lib/storage-public";
 
 const placeholderDestinationImage = "/placeholder.svg";
 
@@ -13,7 +14,7 @@ export interface Destination {
   bestFor: string;
 }
 
-const DESTINATIONS_CACHE_KEY = "nautiplex:destinations-cache:v2";
+const DESTINATIONS_CACHE_KEY = "nautiplex:destinations-cache:v3";
 const DESTINATIONS_CACHE_TTL_MS = 10 * 60 * 1000;
 const DESTINATIONS_CACHE_MAX_STALE_MS = 24 * 60 * 60 * 1000;
 
@@ -26,6 +27,81 @@ type DestinationsCachePayload = {
 
 let destinationsInMemory: DestinationsCachePayload | null = null;
 let destinationsInFlight: Promise<Destination[]> | null = null;
+
+const hasFileExtension = (value: string) => /\.\w{2,6}(\?|$)/.test(value);
+
+const toSignableDestinationImagePath = (value: string): string | null => {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+
+  const normalized = hasFileExtension(trimmed)
+    ? trimmed
+    : trimmed.replace(/\/+$/, "");
+
+  const parsed = parseStorageReference(normalized, "destination-images");
+  if (!parsed || parsed.bucket !== "destination-images" || !parsed.path) {
+    return null;
+  }
+
+  return parsed.path;
+};
+
+const fetchSignedDestinationImageUrls = async (paths: string[]): Promise<Map<string, string>> => {
+  const uniquePaths = Array.from(new Set(paths.map((path) => toSignableDestinationImagePath(path)).filter(Boolean))) as string[];
+  if (uniquePaths.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const payload = await fetchJsonFromEndpoints<{ urls?: Record<string, string> }>(
+      resolveDestinationImageSignEndpoints(),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          paths: uniquePaths,
+          expiresIn: 3600,
+        }),
+      },
+    );
+
+    const map = new Map<string, string>();
+    for (const [path, signedUrl] of Object.entries(payload?.urls ?? {})) {
+      if (typeof signedUrl === "string" && signedUrl.trim()) {
+        map.set(path, signedUrl);
+      }
+    }
+
+    return map;
+  } catch {
+    return new Map();
+  }
+};
+
+const resolveDestinationImageWithSignedUrl = (
+  candidate: string,
+  fallback: string,
+  signedImageUrls?: Map<string, string>,
+): string => {
+  const signPath = toSignableDestinationImagePath(candidate);
+  if (signPath) {
+    const signedUrl = signedImageUrls?.get(signPath);
+    if (signedUrl) return signedUrl;
+
+    if (hasFileExtension(signPath)) {
+      const folderPathNoSlash = signPath.replace(/\/[^/]+$/, "");
+      const folderPathWithSlash = `${folderPathNoSlash}/`;
+      const folderSignedUrl =
+        signedImageUrls?.get(folderPathNoSlash) ||
+        signedImageUrls?.get(folderPathWithSlash);
+      if (folderSignedUrl) return folderSignedUrl;
+    }
+  }
+
+  return resolveStorageImage(candidate, "destination-images", fallback);
+};
 
 const isFresh = (updatedAt: number, ttlMs: number) => Date.now() - updatedAt <= ttlMs;
 
@@ -154,6 +230,14 @@ export const getDestinations = async (): Promise<Destination[]> => {
           .filter(Boolean)
       : [];
 
+    const destinationImagePaths = [...data].map((destination: any) => {
+      const rawImages: string = destination.images?.trim() ?? "";
+      return rawImages && !/\.\w{2,5}$/.test(rawImages)
+        ? `${rawImages}/1.jpg`
+        : rawImages;
+    });
+    const signedImageUrls = await fetchSignedDestinationImageUrls(destinationImagePaths);
+
     return [...data]
       .sort((a: any, b: any) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")))
       .map((destination: any) => {
@@ -177,7 +261,7 @@ export const getDestinations = async (): Promise<Destination[]> => {
         id: destination.id,
         slug: destination.slug ?? String(destination.name ?? "destination").toLowerCase(),
         name: destinationName,
-        image: resolveStorageImage(resolvedImagePath, "destination-images", fallbackImage),
+        image: resolveDestinationImageWithSignedUrl(resolvedImagePath, fallbackImage, signedImageUrls),
         boats: computedBoatCount,
         description: destination.description ?? "",
         bestFor: destination.best_for ?? "",

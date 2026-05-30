@@ -75,7 +75,7 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
         type: boat.type,
         location: boat.location,
         capacity: boat.capacity,
-        pricePerDay: boat.price_per_day,
+        pricePerDay: Number(boat.price ?? 0),
         rating: boat.rating ?? 0,
         image: resolveStorageImage(boat.image, "boat-images", "/placeholder.svg"),
         features: features?.map((f) => f.feature) ?? [],
@@ -119,7 +119,7 @@ export const addOwnerBoat = async (
       type: boat.type,
       location: boat.location,
       capacity: boat.capacity,
-      price_per_day: boat.pricePerDay,
+      price: boat.pricePerDay,
       image: boat.image,
       status: boat.status,
     })
@@ -150,7 +150,7 @@ export const addOwnerBoat = async (
       status: newBoat.status ?? "active",
       mapQuery: newBoat.map_query ?? "",
       flashSaleEnabled: Boolean(newBoat.flash_sale_enabled),
-      pricePerDay: Number(newBoat.price_per_day ?? 0),
+      pricePerDay: Number(newBoat.price ?? 0),
     });
   } catch (err) {
     console.error("Failed to sync sector row after supabase-owner-dashboard insert", err);
@@ -196,7 +196,7 @@ export const addOwnerBoat = async (
     type: newBoat.type,
     location: newBoat.location,
     capacity: newBoat.capacity,
-    pricePerDay: newBoat.price_per_day,
+    pricePerDay: Number(newBoat.price ?? 0),
     rating: newBoat.rating ?? 0,
     image: newBoat.image ?? "",
     features: boat.features,
@@ -230,7 +230,7 @@ export const updateOwnerBoat = async (
       type: updates.type,
       location: updates.location,
       capacity: updates.capacity,
-      price_per_day: updates.pricePerDay,
+      price: updates.pricePerDay,
       image: updates.image,
       status: updates.status,
       updated_at: new Date().toISOString(),
@@ -286,7 +286,7 @@ export const updateOwnerBoat = async (
         status: refreshedBaseBoat.status ?? "active",
         mapQuery: refreshedBaseBoat.map_query ?? "",
         flashSaleEnabled: Boolean(refreshedBaseBoat.flash_sale_enabled),
-        pricePerDay: Number(refreshedBaseBoat.price_per_day ?? 0),
+        pricePerDay: Number(refreshedBaseBoat.price ?? 0),
       });
     }
   } catch (err) {

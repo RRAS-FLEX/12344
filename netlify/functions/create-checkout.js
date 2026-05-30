@@ -115,7 +115,7 @@ export const handler = async (event) => {
 
     const { data: boatById, error: boatByIdError } = await supabaseAdmin
       .from("boats")
-      .select("id, name, owner_id, price_per_day, departure_marina, flash_sale_enabled")
+      .select("id, name, owner_id, departure_marina, flash_sale_enabled")
       .eq("id", boatId)
       .maybeSingle();
 
@@ -123,7 +123,7 @@ export const handler = async (event) => {
     if (!boat && boatName) {
       const { data: boatByName, error: boatByNameError } = await supabaseAdmin
         .from("boats")
-        .select("id, name, owner_id, price_per_day, flash_sale_enabled, departure_marina")
+        .select("id, name, owner_id, flash_sale_enabled, departure_marina")
         .eq("name", boatName)
         .limit(1)
         .maybeSingle();
@@ -139,15 +139,14 @@ export const handler = async (event) => {
 
     if (!boat) return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ error: "Boat not found" }) };
 
-    const dynamicPrice = Number(boat.price_per_day ?? 0);
-    if (!Number.isFinite(dynamicPrice) || dynamicPrice <= 0) {
-      return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "Boat has no valid dynamic price (expected price_per_day)" }) };
-    }
-
     const hasPreDiscountTotal = Number.isFinite(preDiscountTotalFromClient ?? NaN) && (preDiscountTotalFromClient ?? 0) > 0;
     const baseTotalPrice = hasPreDiscountTotal
       ? Number(preDiscountTotalFromClient)
-      : (Number.isFinite(totalPriceFromClient ?? NaN) && (totalPriceFromClient ?? 0) > 0 ? Number(totalPriceFromClient) : dynamicPrice);
+      : (Number.isFinite(totalPriceFromClient ?? NaN) && (totalPriceFromClient ?? 0) > 0 ? Number(totalPriceFromClient) : 0);
+
+    if (!Number.isFinite(baseTotalPrice) || baseTotalPrice <= 0) {
+      return { statusCode: 400, headers: corsHeaders, body: JSON.stringify({ error: "Missing total price. Add at least one package before checkout." }) };
+    }
 
     const { data: ownerRaw } = await supabaseAdmin
       .from("users")
@@ -218,103 +217,29 @@ export const handler = async (event) => {
       return { statusCode: 409, headers: corsHeaders, body: JSON.stringify({ error: "Selected time slot is no longer available." }) };
     }
 
-    // find reusable pending booking or create one
-    const normalizedCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim().toLowerCase() : undefined;
-    const findReusablePendingBooking = async () => {
-      if (normalizedCustomerEmail) {
-        const { data: byEmail } = await supabaseAdmin
-          .from("bookings")
-          .select("id")
-          .eq("boat_id", boat.id)
-          .eq("start_date", selectedDate)
-          .eq("departure_time", selectedDepartureTime)
-          .eq("status", "pending")
-          .eq("customer_email", normalizedCustomerEmail)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (byEmail) return byEmail;
+    // Do not keep unpaid pending rows as hard blockers for the same slot.
+    await supabaseAdmin
+      .from("bookings")
+      .update({ status: "cancelled" })
+      .eq("boat_id", boat.id)
+      .eq("start_date", selectedDate)
+      .eq("departure_time", selectedDepartureTime)
+      .eq("status", "pending")
+      .is("stripe_payment_intent_id", null);
+
+    const normalizedCustomerEmail = typeof customerEmail === "string" ? customerEmail.trim().toLowerCase() : "";
+    const checkoutReference = `chk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+    let bookingEndDate = selectedDate;
+    try {
+      const startMinutes = toMinutes(selectedDepartureTime);
+      const endMinutes = toMinutes(bookingEndTime);
+      if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
+        const next = new Date(`${selectedDate}T00:00:00.000Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        bookingEndDate = next.toISOString().slice(0, 10);
       }
-      const { data: byNullEmail } = await supabaseAdmin
-        .from("bookings")
-        .select("id")
-        .eq("boat_id", boat.id)
-        .eq("start_date", selectedDate)
-        .eq("departure_time", selectedDepartureTime)
-        .eq("status", "pending")
-        .is("customer_email", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      return byNullEmail ?? null;
-    };
-
-    let bookingRow = await findReusablePendingBooking();
-    if (!bookingRow) {
-      const ownerDisplayName = ownerRaw?.full_name || ownerRaw?.name || ownerRaw?.email || "Owner";
-      const customerNameFromEmail = normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest";
-      const partyTicketCount = Math.max(1, Number(body.guests ?? 1) || 1);
-      // determine end date for bookings that wrap past midnight
-      let bookingEndDate = selectedDate;
-      try {
-        const startMinutes = toMinutes(selectedDepartureTime);
-        const endMinutes = toMinutes(bookingEndTime);
-        if (startMinutes !== null && endMinutes !== null && endMinutes <= startMinutes) {
-          const next = new Date(`${selectedDate}T00:00:00.000Z`);
-          next.setUTCDate(next.getUTCDate() + 1);
-          bookingEndDate = next.toISOString().slice(0, 10);
-        }
-      } catch {}
-
-      const { data: createdBooking, error: bookingError } = await supabaseAdmin
-        .from("bookings")
-        .insert({
-          boat_id: boat.id,
-          customer_id: customerId ?? null,
-          customer_email: normalizedCustomerEmail ?? null,
-          start_date: selectedDate,
-          end_date: bookingEndDate,
-          departure_time: selectedDepartureTime,
-          start_time: selectedDepartureTime,
-          end_time: bookingEndTime,
-          package_hours: selectedPackageHours,
-          guests: partyTicketCount,
-          total_price: discountedTotal,
-          status: "pending",
-          boat_name: boat.name,
-          owner_name: ownerDisplayName,
-          customer_name: customerNameFromEmail,
-          package_label: Boolean(isPartyBooking) ? "Party tickets" : "Stripe checkout",
-          departure_marina: boat.departure_marina ?? "",
-          extras: [],
-          notes: "",
-          payment_method: "stripe",
-          payment_plan: paymentPlan || "full",
-          amount_due_now: amountDueNow,
-          deposit_amount: depositAmount,
-          platform_commission: platformCommission,
-          owner_payout: ownerPayout,
-          ...(isPartyBooking ? {
-            party_event_date: partyEventDate ?? null,
-            party_event_time: partyEventTime ?? null,
-            party_tier_selected: partyTierSelected ?? null,
-            party_tier_price: partyTierPrice ?? null,
-          } : {}),
-        })
-        .select("id")
-        .single();
-      if (bookingError || !createdBooking) {
-        const message = bookingError?.message ?? "Failed to create pending booking";
-        return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: message }) };
-      }
-      bookingRow = createdBooking;
-    }
-
-    if (bookingRow && (customerId || normalizedCustomerEmail)) {
-      try {
-        await supabaseAdmin.from("bookings").update({ ...(customerId ? { customer_id: customerId } : {}), ...(normalizedCustomerEmail ? { customer_email: normalizedCustomerEmail } : {}) }).eq("id", bookingRow.id);
-      } catch {}
-    }
+    } catch {}
 
     const appBaseUrl = getRequestOrigin(event);
 
@@ -346,13 +271,41 @@ export const handler = async (event) => {
           ? {
               application_fee_amount: applicationFeeAmount,
               transfer_data: { destination: ownerRaw?.stripe_account_id },
-              metadata: { bookingId: bookingRow.id, boatId: boat.id },
+              metadata: { boatId: boat.id, checkoutReference },
             }
-          : { metadata: { bookingId: bookingRow.id, boatId: boat.id, payoutMode: "platform_only" } };
+          : { metadata: { boatId: boat.id, checkoutReference, payoutMode: "platform_only" } };
 
       return stripe.checkout.sessions.create({
         ...baseSessionPayload,
-        metadata: { boatId: boat.id, ownerId: ownerRaw?.id, bookingId: bookingRow.id, payoutMode },
+        metadata: {
+          boatId: boat.id,
+          ownerId: ownerRaw?.id,
+          checkoutReference,
+          bookingDate: selectedDate,
+          bookingEndDate,
+          departureTime: selectedDepartureTime,
+          endTime: bookingEndTime,
+          packageHours: String(selectedPackageHours),
+          guests: String(Math.max(1, Number(body.guests ?? 1) || 1)),
+          boatName: boat.name,
+          departureMarina: boat.departure_marina ?? "",
+          paymentPlan: paymentPlan || "full",
+          totalPrice: String(discountedTotal),
+          amountDueNow: String(amountDueNow),
+          depositAmount: String(depositAmount),
+          platformCommission: String(platformCommission),
+          ownerPayout: String(ownerPayout),
+          customerId: customerId ?? "",
+          customerEmail: normalizedCustomerEmail,
+          customerName: normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest",
+          packageLabel: Boolean(isPartyBooking) ? "Party tickets" : "Stripe checkout",
+          isPartyBooking: String(Boolean(isPartyBooking)),
+          partyEventDate: isPartyBooking ? (partyEventDate ?? "") : "",
+          partyEventTime: isPartyBooking ? (partyEventTime ?? "") : "",
+          partyTierSelected: isPartyBooking ? (partyTierSelected ?? "") : "",
+          partyTierPrice: isPartyBooking ? String(partyTierPrice ?? 0) : "0",
+          payoutMode,
+        },
         payment_intent_data: paymentIntentData,
       });
     };
@@ -375,9 +328,61 @@ export const handler = async (event) => {
       }
     }
 
-    await supabaseAdmin.from("bookings").update({ stripe_session_id: checkoutSession.id }).eq("id", bookingRow.id);
+    const stripePaymentIntentId =
+      typeof checkoutSession.payment_intent === "string"
+        ? checkoutSession.payment_intent
+        : (checkoutSession.payment_intent && typeof checkoutSession.payment_intent === "object" && typeof checkoutSession.payment_intent.id === "string"
+            ? checkoutSession.payment_intent.id
+            : null);
 
-    return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ sessionId: checkoutSession.id, checkoutUrl: checkoutSession.url, bookingId: bookingRow.id, amount: amountDueNow, commissionAmount: platformCommission, ownerStripeAccountId: ownerRaw?.stripe_account_id, payoutMode, warning, flashSaleEligible, flashSaleDiscount: 0 }) };
+    const pendingBookingPayload = {
+      boat_id: boat.id,
+      customer_id: customerId ?? null,
+      customer_name: normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest",
+      customer_email: normalizedCustomerEmail || null,
+      start_date: selectedDate,
+      end_date: bookingEndDate,
+      departure_time: selectedDepartureTime,
+      start_time: selectedDepartureTime,
+      end_time: bookingEndTime,
+      package_hours: selectedPackageHours,
+      status: "pending",
+      total_price: discountedTotal,
+      boat_name: boat.name || "",
+      owner_name: ownerRaw?.full_name || ownerRaw?.name || "Owner",
+      package_label: Boolean(isPartyBooking) ? "Party tickets" : "Stripe checkout",
+      guests: Math.max(1, Number(body.guests ?? 1) || 1),
+      departure_marina: boat.departure_marina ?? "",
+      extras: [],
+      notes: "",
+      payment_method: null,
+      payment_plan: paymentPlan || "full",
+      amount_due_now: amountDueNow,
+      deposit_amount: depositAmount,
+      platform_commission: platformCommission,
+      owner_payout: ownerPayout,
+      request_id: checkoutReference,
+      stripe_session_id: checkoutSession.id,
+      stripe_payment_intent_id: stripePaymentIntentId,
+      ...(Boolean(isPartyBooking)
+        ? {
+            party_ticket_count: Math.max(1, Number(body.guests ?? 1) || 1),
+            party_ticket_status: "issued",
+          }
+        : {}),
+    };
+
+    const { data: pendingBooking, error: pendingBookingError } = await supabaseAdmin
+      .from("bookings")
+      .insert(pendingBookingPayload)
+      .select("id")
+      .maybeSingle();
+
+    if (pendingBookingError) {
+      return { statusCode: 500, headers: corsHeaders, body: JSON.stringify({ error: pendingBookingError.message || "Failed to create pending booking" }) };
+    }
+
+    return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ sessionId: checkoutSession.id, checkoutUrl: checkoutSession.url, bookingId: pendingBooking?.id ?? null, amount: amountDueNow, commissionAmount: platformCommission, ownerStripeAccountId: ownerRaw?.stripe_account_id, payoutMode, warning, flashSaleEligible, flashSaleDiscount: 0 }) };
   } catch (error) {
     console.error("create-checkout error", error);
     const errorMessage = error instanceof Error ? error.message : "Unexpected error";

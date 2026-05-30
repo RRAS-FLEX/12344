@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/accordion";
 import { ImpactStatsSkeleton } from "@/components/loading/LoadingUI";
 import { useLanguage } from "@/contexts/LanguageContext";
+import RatingComparisonPill from "@/components/ratings/RatingComparisonPill";
 import { supabase } from "@/lib/supabase";
 
 const values = [
@@ -307,11 +308,13 @@ const About = () => {
                 </p>
                 <p className="flex items-center gap-2">
                   <Anchor className="h-4 w-4 text-aegean" />
-                  {tl(
-                    averageRating !== null ? `${averageRating.toFixed(1)}+ avg trip rating` : "Avg trip rating",
-                    averageRating !== null ? `${averageRating.toFixed(1)}+ μέση βαθμολογία εκδρομών` : "Μέση βαθμολογία εκδρομών",
-                  )}
+                  <span>{tl("Guest rating", "Βαθμολογία επισκεπτών")}</span>
                 </p>
+                {averageRating !== null ? (
+                  <RatingComparisonPill rating={averageRating} benchmarkRating={4.6} label={tl("fleet", "στόλο")} />
+                ) : (
+                  <p className="text-xs text-muted-foreground">{tl("Rating data loading", "Φόρτωση δεδομένων βαθμολογίας")}</p>
+                )}
               </CardContent>
             </Card>
           </div>

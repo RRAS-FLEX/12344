@@ -7,6 +7,9 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
+const isValidTime = (value) => TIME_REGEX.test(String(value ?? ""));
+
 // Netlify passes the raw body as event.body (string) and provides headers.
 export const handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
@@ -45,17 +48,148 @@ export const handler = async (event) => {
   }
 
   try {
-    if (ev.type === "checkout.session.completed") {
+    if (ev.type === "checkout.session.completed" || ev.type === "checkout.session.async_payment_succeeded") {
       const session = ev.data.object;
-      const bookingId = (session.metadata?.bookingId ?? null) || null;
+      const stripePaymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent && typeof session.payment_intent === "object" && typeof session.payment_intent.id === "string"
+              ? session.payment_intent.id
+              : null);
+      const metadata = session.metadata ?? {};
+      let bookingId = String(metadata.bookingId ?? "").trim() || null;
+      const paymentStatus = String(session.payment_status ?? "").toLowerCase();
+      let paymentIntentStatus = "unknown";
+      if (stripePaymentIntentId) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+          paymentIntentStatus = String(paymentIntent?.status ?? "unknown").toLowerCase();
+        } catch {
+          // Keep unknown when PaymentIntent lookup fails.
+        }
+      }
+      const isPaid = paymentStatus === "paid" || paymentIntentStatus === "succeeded";
+
+      const metadataNumber = (key, fallback = 0) => {
+        const raw = String(metadata[key] ?? "").trim();
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      const metadataString = (key, fallback = "") => String(metadata[key] ?? fallback).trim();
+
+      if (!bookingId) {
+        const { data: bySession } = await supabaseAdmin
+          .from("bookings")
+          .select("id")
+          .eq("stripe_session_id", session.id)
+          .maybeSingle();
+
+        if (bySession?.id) {
+          bookingId = bySession.id;
+        }
+      }
+
+      if (!bookingId && isPaid) {
+        const boatId = metadataString("boatId");
+        const bookingDate = metadataString("bookingDate");
+        const bookingEndDate = metadataString("bookingEndDate") || bookingDate;
+        const departureTime = metadataString("departureTime");
+        const endTime = metadataString("endTime");
+        const packageHours = Math.max(1, Math.min(8, metadataNumber("packageHours", 1)));
+        const guests = Math.max(1, metadataNumber("guests", 1));
+        const customerEmail = (session.customer_details?.email || metadataString("customerEmail") || "").trim().toLowerCase();
+        const customerName = metadataString("customerName") || String(session.customer_details?.name ?? "").trim() || "Guest";
+
+        if (boatId && bookingDate && isValidTime(departureTime) && isValidTime(endTime)) {
+          const { data: boat } = await supabaseAdmin
+            .from("boats")
+            .select("id, name, owner_id, departure_marina")
+            .eq("id", boatId)
+            .maybeSingle();
+
+          if (boat?.id) {
+            const { data: owner } = await supabaseAdmin
+              .from("users")
+              .select("id, full_name, name")
+              .eq("id", boat.owner_id)
+              .maybeSingle();
+
+            let inferredCustomerId = metadataString("customerId") || null;
+            if (!inferredCustomerId && customerEmail) {
+              const { data: customerUser } = await supabaseAdmin
+                .from("users")
+                .select("id")
+                .eq("email", customerEmail)
+                .maybeSingle();
+              inferredCustomerId = customerUser?.id ?? null;
+            }
+
+            const { data: insertedBooking } = await supabaseAdmin
+              .from("bookings")
+              .insert({
+                boat_id: boat.id,
+                customer_id: inferredCustomerId,
+                customer_email: customerEmail || null,
+                start_date: bookingDate,
+                end_date: bookingEndDate,
+                departure_time: departureTime,
+                start_time: departureTime,
+                end_time: endTime,
+                package_hours: packageHours,
+                total_price: metadataNumber("totalPrice", metadataNumber("amountDueNow", 0)),
+                status: "confirmed",
+                boat_name: metadataString("boatName") || boat.name || "",
+                owner_name: owner?.full_name || owner?.name || "Owner",
+                customer_name: customerName,
+                package_label: metadataString("packageLabel") || "Stripe checkout",
+                guests,
+                departure_marina: metadataString("departureMarina") || boat.departure_marina || "",
+                extras: [],
+                notes: "",
+                payment_method: "stripe",
+                payment_plan: metadataString("paymentPlan") || "full",
+                amount_due_now: metadataNumber("amountDueNow", 0),
+                deposit_amount: metadataNumber("depositAmount", 0),
+                platform_commission: metadataNumber("platformCommission", 0),
+                owner_payout: metadataNumber("ownerPayout", 0),
+                stripe_session_id: session.id,
+                stripe_payment_intent_id: stripePaymentIntentId,
+                ...(metadataString("isPartyBooking") === "true" ? {
+                  party_ticket_code: metadataString("partyTicketCode") || null,
+                  party_ticket_count: metadataNumber("partyTicketCount", 0),
+                  party_ticket_status: metadataString("partyTicketStatus") || null,
+                } : {}),
+              })
+              .select("id")
+              .maybeSingle();
+
+            if (insertedBooking?.id) {
+              bookingId = insertedBooking.id;
+            }
+          }
+        }
+      }
 
       if (bookingId) {
         const stripeSessionId = session.id;
-        const stripePaymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+        if (!isPaid) {
+          await supabaseAdmin
+            .from("bookings")
+            .update({
+              status: "pending",
+              stripe_session_id: stripeSessionId,
+              stripe_payment_intent_id: stripePaymentIntentId,
+            })
+            .eq("id", bookingId);
+
+          return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ received: true }) };
+        }
 
         const { data: booking } = await supabaseAdmin
           .from("bookings")
-          .select("id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_event_date, party_event_time, party_tier_selected, party_tier_price")
+          .select("id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_ticket_code, party_ticket_count, party_ticket_status")
           .eq("id", bookingId)
           .maybeSingle();
 
@@ -140,10 +274,6 @@ export const handler = async (event) => {
             owner_payout: ownerPayout,
             extras: safeExtras,
             notes: safeNotes,
-            ...(booking.party_event_date ? { party_event_date: booking.party_event_date } : {}),
-            ...(booking.party_event_time ? { party_event_time: booking.party_event_time } : {}),
-            ...(booking.party_tier_selected ? { party_tier_selected: booking.party_tier_selected } : {}),
-            ...(booking.party_tier_price ? { party_tier_price: booking.party_tier_price } : {}),
           };
 
           const normalizedEmail = (customerEmail || stripeEmail || "").trim().toLowerCase();
@@ -195,8 +325,45 @@ export const handler = async (event) => {
 
         const { error } = await supabaseAdmin.from("bookings").update(updatePayload).eq("id", bookingId);
         if (error) {
-          await supabaseAdmin.from("bookings").update({ status: "confirmed" }).eq("id", bookingId);
+          console.error("stripe-webhook booking update error", error);
         }
+      }
+    } else if (ev.type === "checkout.session.expired" || ev.type === "checkout.session.async_payment_failed") {
+      const session = ev.data.object;
+      const stripeSessionId = String(session.id ?? "").trim();
+      const stripePaymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent && typeof session.payment_intent === "object" && typeof session.payment_intent.id === "string"
+              ? session.payment_intent.id
+              : null);
+
+      if (stripeSessionId) {
+        await supabaseAdmin
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            stripe_session_id: stripeSessionId,
+            stripe_payment_intent_id: stripePaymentIntentId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_session_id", stripeSessionId)
+          .in("status", ["pending", "confirmed"]);
+      }
+    } else if (ev.type === "payment_intent.payment_failed") {
+      const paymentIntent = ev.data.object;
+      const paymentIntentId = String(paymentIntent.id ?? "").trim();
+
+      if (paymentIntentId) {
+        await supabaseAdmin
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            stripe_payment_intent_id: paymentIntentId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_payment_intent_id", paymentIntentId)
+          .in("status", ["pending", "confirmed"]);
       }
     }
 

@@ -23,6 +23,7 @@ import {
   OwnerBoat,
   BoatDocument,
 } from "../../../lib/owner-dashboard";
+import { getBoatLocations, formatBoatLocationLabel, type BoatLocation } from "@/lib/boat-locations";
 import { useToast } from "@/hooks/use-toast";
 import BoatLocationPicker from "./BoatLocationPicker";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -51,7 +52,7 @@ const BOAT_FEATURE_OPTIONS = [
 const YACHT_TYPE_OPTIONS = ["Motor Yacht", "Speed Boat", "Catamaran", "Luxury Yacht", "Sailboat", "Dinghy", "Jet Ski"];
 const DOCUMENT_LABELS = ["Registration Certificate", "Insurance Policy", "Skipper License", "Safety Inspection", "Port Authority Permit"];
 
-const BASE_FORM_STEPS = ["Basics", "Specs", "Features & Pricing", "Documents"];
+const BASE_FORM_STEPS = ["Basics", "Specs", "Features", "Documents"];
 const createLocalId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -66,8 +67,10 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
   const formSteps = BASE_FORM_STEPS;
   const docInputRef = useRef<HTMLInputElement>(null);
   const [currentStep, setCurrentStep] = useState(1);
+  const [locationOptions, setLocationOptions] = useState<BoatLocation[]>([]);
 
   const [formData, setFormData] = useState({
+    locationId: boat?.locationId ?? "",
     name: boat?.name ?? "",
     type: boat?.type ?? "Motor Yacht",
     location: boat?.location ?? "Thassos",
@@ -77,18 +80,15 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
     cruisingSpeedKnots: boat?.cruisingSpeedKnots ?? 22,
     fuelBurnLitresPerHour: boat?.fuelBurnLitresPerHour ?? 16,
     departureMarina: boat?.departureMarina ?? "",
-    cancellationPolicy: Number(boat?.cancellationPolicy) || 72,
     mapQuery: boat?.mapQuery ?? "",
     externalCalendarUrl: boat?.externalCalendarUrl ?? "",
-    flashSaleEnabled: boat?.flashSaleEnabled ?? false,
     // voucher fields removed
     unavailableDatesInput: (boat?.unavailableDates ?? []).join(", "),
     minNoticeHours: boat?.minNoticeHours ?? 24,
     capacity: boat?.capacity ?? 4,
-    pricePerDay: boat?.pricePerDay ?? 500,
     image: boat?.image ?? "",
     skipperRequired: boat?.skipperRequired ?? false,
-    status: boat?.status ?? "active",
+    status: boat?.status ?? "inactive",
   });
 
   const [features, setFeatures] = useState<string[]>(boat?.features ?? ["Life Jackets"]);
@@ -99,6 +99,33 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
   const [packages, setPackages] = useState<Array<{ id: string; name: string; duration: number; price: number; description: string }>>([]);
   const [docLabelIndex, setDocLabelIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLocations = async () => {
+      const options = await getBoatLocations();
+      if (cancelled) return;
+      setLocationOptions(options);
+
+      if (!formData.locationId && options.length > 0) {
+        const first = options[0];
+        setFormData((current) => ({
+          ...current,
+          locationId: first.id,
+          location: first.location,
+          departureMarina: first.name,
+          mapQuery: first.mapQuery || formatBoatLocationLabel(first),
+        }));
+      }
+    };
+
+    void loadLocations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,6 +258,7 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
       setIsSubmitting(true);
 
       const boatInput = {
+        locationId: formData.locationId || null,
         name: formData.name,
         type: formData.type,
         location: formData.location,
@@ -240,13 +268,10 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
         cruisingSpeedKnots: Number(formData.cruisingSpeedKnots),
         fuelBurnLitresPerHour: Number(formData.fuelBurnLitresPerHour),
         departureMarina: formData.departureMarina,
-        cancellationPolicy: Number(formData.cancellationPolicy) || 72,
         mapQuery: formData.mapQuery,
         externalCalendarUrl: formData.externalCalendarUrl,
         skipperRequired: formData.skipperRequired,
         capacity: Number(formData.capacity),
-        pricePerDay: Number(formData.pricePerDay),
-        flashSaleEnabled: formData.flashSaleEnabled,
         partyReady: false,
         // voucher fields removed
         features,
@@ -326,11 +351,31 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
               </div>
               <div className="space-y-2">
                 <Label>{tl("Location", "Τοποθεσία")}</Label>
-                <Input
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g., Thassos"
-                />
+                <Select
+                  value={formData.locationId || undefined}
+                  onValueChange={(value) => {
+                    const selected = locationOptions.find((item) => item.id === value);
+                    if (!selected) return;
+                    setFormData({
+                      ...formData,
+                      locationId: selected.id,
+                      location: selected.location,
+                      departureMarina: selected.name,
+                      mapQuery: selected.mapQuery || formatBoatLocationLabel(selected),
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={tl("Select location", "Επίλεξε τοποθεσία")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locationOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {formatBoatLocationLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>{tl("Capacity (guests)", "Χωρητικότητα (επισκέπτες)")}</Label>
@@ -474,24 +519,13 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
         <Card className="w-full max-w-2xl">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
-              <span>{tl("Add Yacht - Pricing & Features", "Προσθήκη Γιοτ - Τιμολόγηση & Χαρακτηριστικά")}</span>
+              <span>{tl("Add Yacht - Features", "Προσθήκη Γιοτ - Χαρακτηριστικά")}</span>
               <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
               </button>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 max-h-[600px] overflow-y-auto">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>{tl("Price per day (€)", "Τιμή ανά ημέρα (€)")}</Label>
-                <Input type="number" value={formData.pricePerDay} onChange={(e) => setFormData({ ...formData, pricePerDay: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <Label>{tl("Cancellation policy (hours)", "Πολιτική ακύρωσης (ώρες)")}</Label>
-                <Input type="number" value={formData.cancellationPolicy} onChange={(e) => setFormData({ ...formData, cancellationPolicy: Number(e.target.value) })} />
-              </div>
-            </div>
-
             <div className="space-y-3">
               <h4 className="font-semibold">{tl("Features & Amenities", "Χαρακτηριστικά και Ανέσεις")}</h4>
               <div className="grid grid-cols-2 gap-2">
@@ -514,19 +548,11 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
               </div>
             </div>
 
-            {/* voucher promotion removed */}
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="flash-sale"
-                  checked={formData.flashSaleEnabled}
-                  onCheckedChange={(checked) => setFormData({ ...formData, flashSaleEnabled: checked as boolean })}
-                />
-                <Label htmlFor="flash-sale" className="cursor-pointer">
-                  {tl("Enable flash sales (30% off within 24 hours)", "Ενεργοποίηση flash sales (30% έκπτωση εντός 24 ωρών)")}
-                </Label>
-              </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              {tl(
+                "Pricing, cancellation rules, and flash sales are managed in Packages. Add at least one package before making this boat active.",
+                "Η τιμολόγηση, οι κανόνες ακύρωσης και οι flash sales διαχειρίζονται στα Πακέτα. Πρόσθεσε τουλάχιστον ένα πακέτο πριν ενεργοποιήσεις αυτό το σκάφος.",
+              )}
             </div>
 
             <div className="flex gap-2 justify-end">

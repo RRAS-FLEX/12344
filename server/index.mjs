@@ -13,8 +13,6 @@ dotenv.config({ path: ".env" });
 dotenv.config({ path: ".env.local", override: true });
 
 const requiredEnv = [
-  "STRIPE_SECRET_KEY",
-  "STRIPE_PUBLISHABLE_KEY",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
 ];
@@ -35,6 +33,12 @@ const hasPlaceholderValue = (value) => {
 for (const key of requiredEnv) {
   if (!process.env[key]) {
     throw new Error(`Missing required environment variable: ${key}`);
+  }
+}
+
+for (const key of ["STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY"]) {
+  if (!process.env[key]) {
+    console.warn(`Missing optional environment variable: ${key}. Stripe endpoints will be unavailable until configured.`);
   }
 }
 
@@ -61,7 +65,7 @@ const getSupabaseConfigErrorMessage = () =>
 const getStripeConfigErrorMessage = () =>
   "Stripe is not configured. Set real STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY values in .env/.env.local (do not use placeholder values).";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder", {
   apiVersion: "2025-02-24.acacia",
 });
 
@@ -176,49 +180,17 @@ const buildBookingEmailContent = ({
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
-      <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #2D3748; margin: 0; padding: 0; background-color: #f9fafb;">
+      <body style="font-family: Helvetica, Arial, sans-serif; color: #2D3748; margin: 0; padding: 0; background-color: #f9fafb;">
         <div style="max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px; background-color: #ffffff;">
-          <div style="text-align: center; border-bottom: 2px solid #3182CE; padding-bottom: 20px;">
-            <img src="http://desk-jojos.tail9d3e44.ts.net:8080/nautiplex_logo.png" 
-                 alt="NAUTIPLEX" 
-                 style="height: 60px; width: auto;" />
-          </div>
-
-          <div style="background-color: #F7FAFC; padding: 30px; text-align: center; border-radius: 8px; margin: 20px 0;">
-            <h1 style="margin:0; font-size: 24px; color: #2D3748;">Booking Confirmed!</h1>
-            <p style="color: #718096; font-size: 16px;">Get ready to set sail, ${name}.</p>
-          </div>
-
-          <h2 style="font-size: 18px; color: #3182CE; border-bottom: 1px solid #EDF2F7; padding-bottom: 8px;">Trip Overview</h2>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568; width: 40%;">Boat</td><td style="padding: 12px 0;">${boatName}</td></tr>
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568;">Date</td><td style="padding: 12px 0;">${formattedDate}</td></tr>
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568;">Marina</td><td style="padding: 12px 0;">${marina}</td></tr>
-          </table>
-
-          <h2 style="font-size: 18px; color: #3182CE; border-bottom: 1px solid #EDF2F7; padding-bottom: 8px; margin-top: 30px;">Payment Summary</h2>
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568;">Total Price</td><td style="padding: 12px 0;">€${total.toFixed(2)}</td></tr>
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568;">Amount Paid Now</td><td style="padding: 12px 0; color: #38A169; font-weight: bold;">€${paidNow.toFixed(2)}</td></tr>
-            <tr><td style="padding: 12px 0; font-weight: bold; color: #4A5568;">Remaining Balance</td><td style="padding: 12px 0;">€${remaining.toFixed(2)}</td></tr>
-          </table>
-
-          ${receiptUrl
-            ? `<p style="margin-top: 16px; font-size: 14px;">Stripe receipt: <a href="${receiptUrl}" style="color: #3182CE;">View payment receipt</a></p>`
-            : ""}
-
-          <div style="text-align: center; margin: 40px 0;">
-            <a href="https://nautiplex.com/my-bookings" style="background-color: #3182CE; color: white; padding: 14px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Manage My Booking</a>
-          </div>
-
-          <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #E2E8F0;">
-            <p style="font-size: 14px; font-weight: bold; color: #4A5568; margin: 0;">Nautiplex Boat Rentals</p>
-            <p style="font-size: 12px; color: #A0AEC0; margin: 5px 0;">Athens, Greece &bull; Support: info@nautiplex.com</p>
-            <p style="font-size: 11px; color: #CBD5E0; margin-top: 20px;">
-              You received this email because you made a booking on nautiplex.com.<br />
-              &copy; 2026 Nautiplex. All rights reserved.
-            </p>
-          </div>
+          <h1 style="margin:0; font-size: 24px; color: #2D3748;">Booking Confirmed</h1>
+          <p style="color: #718096; font-size: 16px;">Get ready to set sail, ${name}.</p>
+          <p><strong>Boat:</strong> ${boatName}</p>
+          <p><strong>Date:</strong> ${formattedDate}</p>
+          <p><strong>Marina:</strong> ${marina}</p>
+          <p><strong>Total:</strong> EUR ${total.toFixed(2)}</p>
+          <p><strong>Paid now:</strong> EUR ${paidNow.toFixed(2)}</p>
+          <p><strong>Remaining:</strong> EUR ${remaining.toFixed(2)}</p>
+          ${receiptUrl ? `<p>Stripe receipt: <a href="${receiptUrl}">View payment receipt</a></p>` : ""}
         </div>
       </body>
     </html>
@@ -230,20 +202,16 @@ const buildBookingEmailContent = ({
     `Your Nautiplex booking for ${boatName} is confirmed.`,
     `Date: ${formattedDate}`,
     `Marina: ${marina}`,
-    `Total: €${total.toFixed(2)}`,
-    `Paid now: €${paidNow.toFixed(2)}`,
-    `Remaining: €${remaining.toFixed(2)}`,
+    `Total: EUR ${total.toFixed(2)}`,
+    `Paid now: EUR ${paidNow.toFixed(2)}`,
+    `Remaining: EUR ${remaining.toFixed(2)}`,
   ];
 
   if (receiptUrl) {
     lines.push("", `Stripe receipt: ${receiptUrl}`);
   }
 
-  lines.push(
-    "",
-    "See you on the water,",
-    "Nautiplex",
-  );
+  lines.push("", "See you on the water,", "Nautiplex");
 
   const text = lines.join("\n");
 
@@ -537,21 +505,158 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
     return res.status(400).json({ error: message });
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
     const session = event.data.object;
-    const bookingId = session.metadata?.bookingId;
+    const stripePaymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent && typeof session.payment_intent === "object" && typeof session.payment_intent.id === "string"
+            ? session.payment_intent.id
+            : null);
+    const metadata = session.metadata ?? {};
+    let resolvedBookingId = String(metadata.bookingId ?? "").trim() || null;
+    const paymentStatus = String(session.payment_status ?? "").toLowerCase();
+    let paymentIntentStatus = "unknown";
+    if (stripePaymentIntentId) {
+      try {
+        const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+        paymentIntentStatus = String(paymentIntent?.status ?? "unknown").toLowerCase();
+      } catch {
+        // Keep unknown when PaymentIntent lookup fails.
+      }
+    }
+    const isPaid = paymentStatus === "paid" || paymentIntentStatus === "succeeded";
+    const hasVerifiedPaymentIntent = Boolean(String(stripePaymentIntentId ?? "").trim());
 
-    if (bookingId) {
+    const metadataNumber = (key, fallback = 0) => {
+      const raw = String(metadata[key] ?? "").trim();
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+
+    const metadataString = (key, fallback = "") => String(metadata[key] ?? fallback).trim();
+
+    if (!resolvedBookingId) {
+      try {
+        const { data: bySession } = await supabaseAdmin
+          .from("bookings")
+          .select("id")
+          .eq("stripe_session_id", session.id)
+          .maybeSingle();
+
+        if (bySession?.id) {
+          resolvedBookingId = bySession.id;
+        }
+      } catch {
+        // Ignore lookup errors here; create flow below handles missing rows.
+      }
+    }
+
+    if (!resolvedBookingId && isPaid && hasVerifiedPaymentIntent) {
+      const boatId = metadataString("boatId");
+      const bookingDate = metadataString("bookingDate");
+      const bookingEndDate = metadataString("bookingEndDate") || bookingDate;
+      const departureTime = metadataString("departureTime");
+      const endTime = metadataString("endTime");
+      const packageHours = Math.max(1, Math.min(8, metadataNumber("packageHours", 1)));
+      const guests = Math.max(1, metadataNumber("guests", 1));
+      const customerEmail = (session.customer_details?.email || metadataString("customerEmail") || "").trim().toLowerCase();
+      const customerName = metadataString("customerName") || String(session.customer_details?.name ?? "").trim() || "Guest";
+
+      if (boatId && bookingDate && isValidTime(departureTime) && isValidTime(endTime)) {
+        const { data: boat } = await supabaseAdmin
+          .from("boats")
+          .select("id, name, owner_id, departure_marina")
+          .eq("id", boatId)
+          .maybeSingle();
+
+        if (boat?.id) {
+          const { data: owner } = await supabaseAdmin
+            .from("users")
+            .select("id, full_name, name")
+            .eq("id", boat.owner_id)
+            .maybeSingle();
+
+          let inferredCustomerId = metadataString("customerId") || null;
+          if (!inferredCustomerId && customerEmail) {
+            const { data: customerUser } = await supabaseAdmin
+              .from("users")
+              .select("id")
+              .eq("email", customerEmail)
+              .maybeSingle();
+            inferredCustomerId = customerUser?.id ?? null;
+          }
+
+          const { data: insertedBooking } = await supabaseAdmin
+            .from("bookings")
+            .insert({
+              boat_id: boat.id,
+              customer_id: inferredCustomerId,
+              customer_email: customerEmail || null,
+              start_date: bookingDate,
+              end_date: bookingEndDate,
+              departure_time: departureTime,
+              start_time: departureTime,
+              end_time: endTime,
+              package_hours: packageHours,
+              total_price: metadataNumber("totalPrice", metadataNumber("amountDueNow", 0)),
+              status: "confirmed",
+              boat_name: metadataString("boatName") || boat.name || "",
+              owner_name: owner?.full_name || owner?.name || "Owner",
+              customer_name: customerName,
+              package_label: metadataString("packageLabel") || "Stripe checkout",
+              guests,
+              departure_marina: metadataString("departureMarina") || boat.departure_marina || "",
+              extras: [],
+              notes: "",
+              payment_method: "stripe",
+              payment_plan: metadataString("paymentPlan") || "full",
+              amount_due_now: metadataNumber("amountDueNow", 0),
+              deposit_amount: metadataNumber("depositAmount", 0),
+              platform_commission: metadataNumber("platformCommission", 0),
+              owner_payout: metadataNumber("ownerPayout", 0),
+              stripe_session_id: session.id,
+              stripe_payment_intent_id: stripePaymentIntentId,
+              ...(metadataString("isPartyBooking") === "true" ? {
+                party_ticket_code: metadataString("partyTicketCode") || null,
+                party_ticket_count: metadataNumber("partyTicketCount", 0),
+                party_ticket_status: metadataString("partyTicketStatus") || null,
+              } : {}),
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (insertedBooking?.id) {
+            resolvedBookingId = insertedBooking.id;
+          }
+        }
+      }
+    }
+
+    if (resolvedBookingId) {
       const stripeSessionId = session.id;
-      const stripePaymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : null;
+
+      if (!isPaid || !hasVerifiedPaymentIntent) {
+        await supabaseAdmin
+          .from("bookings")
+          .update({
+            status: "cancelled",
+            stripe_session_id: stripeSessionId,
+            stripe_payment_intent_id: stripePaymentIntentId || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resolvedBookingId);
+
+        return res.json({ received: true });
+      }
 
       // Load the current booking so we can hydrate missing fields on confirmation.
       const { data: booking, error: bookingLoadError } = await supabaseAdmin
         .from("bookings")
         .select(
-           "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_event_date, party_event_time, party_tier_selected, party_tier_price, party_ticket_code, party_ticket_count, party_ticket_status",
+           "id, boat_id, boat_name, owner_name, customer_id, customer_name, customer_email, package_label, guests, start_date, end_date, departure_time, start_time, end_time, package_hours, departure_marina, extras, notes, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, party_ticket_code, party_ticket_count, party_ticket_status",
         )
-        .eq("id", bookingId)
+          .eq("id", resolvedBookingId)
         .maybeSingle();
 
       let updatePayload = {
@@ -811,13 +916,18 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
       const { error } = await supabaseAdmin
         .from("bookings")
         .update(updatePayload)
-        .eq("id", bookingId);
+        .eq("id", resolvedBookingId);
 
       if (error) {
         await supabaseAdmin
           .from("bookings")
-          .update({ status: "confirmed" })
-          .eq("id", bookingId);
+          .update({
+            status: "cancelled",
+            stripe_session_id: stripeSessionId,
+            stripe_payment_intent_id: stripePaymentIntentId || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", resolvedBookingId);
       }
 
       // Generate and store a PDF receipt in Supabase Storage (best-effort).
@@ -840,7 +950,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
         });
 
         const receiptsPathOwner = ownerId || "unknown-owner";
-        const objectPath = `${receiptsPathOwner}/${safeBoatName}/${bookingId}.pdf`;
+        const objectPath = `${receiptsPathOwner}/${safeBoatName}/${resolvedBookingId}.pdf`;
 
         await supabaseAdmin.storage
           .from("payment-receipts")
@@ -854,6 +964,76 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
       // No calendar_events writes here; Stripe confirmation only updates bookings.
     }
+  } else if (event.type === "checkout.session.expired" || event.type === "checkout.session.async_payment_failed") {
+    const session = event.data.object;
+    const stripeSessionId = String(session.id ?? "").trim();
+    const stripePaymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent && typeof session.payment_intent === "object" && typeof session.payment_intent.id === "string"
+            ? session.payment_intent.id
+            : null);
+
+    if (stripeSessionId) {
+      await supabaseAdmin
+        .from("bookings")
+        .update({
+          status: "cancelled",
+          stripe_session_id: stripeSessionId,
+          stripe_payment_intent_id: stripePaymentIntentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("stripe_session_id", stripeSessionId)
+        .in("status", ["pending", "cancelled"]);
+    }
+  } else if (event.type === "payment_intent.succeeded") {
+    const paymentIntent = event.data.object;
+    const paymentIntentId = String(paymentIntent.id ?? "").trim();
+    const checkoutReference = String(paymentIntent.metadata?.checkoutReference ?? "").trim();
+    const nowIso = new Date().toISOString();
+
+    if (paymentIntentId) {
+      const updatePayload = {
+        status: "confirmed",
+        stripe_payment_intent_id: paymentIntentId,
+        updated_at: nowIso,
+      };
+
+      // Primary match: explicit Stripe payment intent id on booking row.
+      const { data: updatedByIntent, error: byIntentError } = await supabaseAdmin
+        .from("bookings")
+        .update(updatePayload)
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .select("id")
+        .limit(1);
+
+      const matchedByIntent = !byIntentError && Array.isArray(updatedByIntent) && updatedByIntent.length > 0;
+
+      // Fallback match: checkout reference stored in payment_intent_data.metadata.
+      // This handles rows created before Stripe returned an intent id at session creation.
+      if (!matchedByIntent && checkoutReference) {
+        await supabaseAdmin
+          .from("bookings")
+          .update(updatePayload)
+          .eq("request_id", checkoutReference)
+          .in("status", ["pending", "cancelled"]);
+      }
+    }
+  } else if (event.type === "payment_intent.payment_failed") {
+    const paymentIntent = event.data.object;
+    const paymentIntentId = String(paymentIntent.id ?? "").trim();
+
+    if (paymentIntentId) {
+      await supabaseAdmin
+        .from("bookings")
+        .update({
+          status: "cancelled",
+          stripe_payment_intent_id: paymentIntentId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("stripe_payment_intent_id", paymentIntentId)
+        .in("status", ["pending", "confirmed"]);
+    }
   }
 
   return res.json({ received: true });
@@ -863,6 +1043,223 @@ app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+const signBoatImageSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1).max(200),
+  expiresIn: z.number().int().min(60).max(60 * 60 * 24).optional(),
+});
+
+const hasFileExtension = (value) => /\.\w{2,6}(\?|$)/.test(String(value ?? ""));
+const BOAT_IMAGE_FILE_REGEX = /\.(avif|jpe?g|png|webp|gif)$/i;
+
+const normalizeBoatImagePath = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  let candidate = raw;
+  if (/^https?:\/\//i.test(candidate)) {
+    try {
+      candidate = new URL(candidate).pathname || "";
+    } catch {
+      return "";
+    }
+  }
+
+  candidate = candidate
+    .replace(/^\/+/, "")
+    .replace(/^storage\/v1\/object\/(public|sign)\/boat-images\//i, "")
+    .replace(/^boat-images\//i, "")
+    .replace(/^\/+/, "")
+    .split("?")[0]
+    .trim();
+
+  if (!candidate || candidate.includes("..")) return "";
+
+  return candidate;
+};
+
+const resolveBoatImageObjectPath = async (normalizedPath) => {
+  if (!normalizedPath) return null;
+  if (hasFileExtension(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  const folder = normalizedPath.replace(/\/+$/, "");
+  if (!folder) return null;
+
+  const { data, error } = await supabaseAdmin.storage
+    .from("boat-images")
+    .list(folder, {
+      limit: 100,
+    });
+
+  if (error || !Array.isArray(data)) {
+    return null;
+  }
+
+  const expectedPrefix = `${folder}/`;
+  const files = data
+    .filter((entry) => {
+      const name = String(entry?.name ?? "").trim();
+      if (!name || !BOAT_IMAGE_FILE_REGEX.test(name)) return false;
+      return true;
+    })
+    .map((entry) => `${folder}/${entry.name}`)
+    .filter((path) => path.startsWith(expectedPrefix));
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  const preferred = files.find((path) => /\/1\.(avif|jpe?g|png|webp|gif)$/i.test(path));
+  return preferred || files.sort((a, b) => a.localeCompare(b))[0];
+};
+
+app.post("/api/storage/boat-images/sign", async (req, res) => {
+  if (!hasValidSupabaseAdminConfig) {
+    return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+  }
+
+  const parsed = signBoatImageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+  }
+
+  const expiresIn = Number(parsed.data.expiresIn ?? 60 * 60);
+  const normalizedPaths = Array.from(
+    new Set(parsed.data.paths.map((path) => normalizeBoatImagePath(path)).filter(Boolean)),
+  );
+
+  if (normalizedPaths.length === 0) {
+    return res.json({ urls: {} });
+  }
+
+  const urls = {};
+  for (const requestedPath of normalizedPaths) {
+    const objectPath = await resolveBoatImageObjectPath(requestedPath);
+    if (!objectPath) {
+      continue;
+    }
+
+    const { data, error } = await supabaseAdmin.storage
+      .from("boat-images")
+      .createSignedUrl(objectPath, expiresIn);
+
+    if (!error && data?.signedUrl) {
+      urls[requestedPath] = data.signedUrl;
+    }
+  }
+
+  return res.json({ urls });
+});
+
+const signDestinationImageSchema = z.object({
+  paths: z.array(z.string().min(1)).min(1).max(200),
+  expiresIn: z.number().int().min(60).max(60 * 60 * 24).optional(),
+});
+
+const DESTINATION_IMAGE_FILE_REGEX = /\.(avif|jpe?g|png|webp|gif)$/i;
+
+const normalizeDestinationImagePath = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  let candidate = raw;
+  if (/^https?:\/\//i.test(candidate)) {
+    try {
+      candidate = new URL(candidate).pathname || "";
+    } catch {
+      return "";
+    }
+  }
+
+  candidate = candidate
+    .replace(/^\/+/, "")
+    .replace(/^storage\/v1\/object\/(public|sign)\/destination-images\//i, "")
+    .replace(/^destination-images\//i, "")
+    .replace(/^\/+/, "")
+    .split("?")[0]
+    .trim();
+
+  if (!candidate || candidate.includes("..")) return "";
+
+  return candidate;
+};
+
+const resolveDestinationImageObjectPath = async (normalizedPath) => {
+  if (!normalizedPath) return null;
+  if (hasFileExtension(normalizedPath)) {
+    return normalizedPath;
+  }
+
+  const folder = normalizedPath.replace(/\/+$/, "");
+  if (!folder) return null;
+
+  const { data, error } = await supabaseAdmin.storage
+    .from("destination-images")
+    .list(folder, {
+      limit: 100,
+    });
+
+  if (error || !Array.isArray(data)) {
+    return null;
+  }
+
+  const expectedPrefix = `${folder}/`;
+  const files = data
+    .filter((entry) => {
+      const name = String(entry?.name ?? "").trim();
+      if (!name || !DESTINATION_IMAGE_FILE_REGEX.test(name)) return false;
+      return true;
+    })
+    .map((entry) => `${folder}/${entry.name}`)
+    .filter((path) => path.startsWith(expectedPrefix));
+
+  if (files.length === 0) {
+    return null;
+  }
+
+  const preferred = files.find((path) => /\/1\.(avif|jpe?g|png|webp|gif)$/i.test(path));
+  return preferred || files.sort((a, b) => a.localeCompare(b))[0];
+};
+
+app.post("/api/storage/destination-images/sign", async (req, res) => {
+  if (!hasValidSupabaseAdminConfig) {
+    return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+  }
+
+  const parsed = signDestinationImageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+  }
+
+  const expiresIn = Number(parsed.data.expiresIn ?? 60 * 60);
+  const normalizedPaths = Array.from(
+    new Set(parsed.data.paths.map((path) => normalizeDestinationImagePath(path)).filter(Boolean)),
+  );
+
+  if (normalizedPaths.length === 0) {
+    return res.json({ urls: {} });
+  }
+
+  const urls = {};
+  for (const requestedPath of normalizedPaths) {
+    const objectPath = await resolveDestinationImageObjectPath(requestedPath);
+    if (!objectPath) {
+      continue;
+    }
+
+    const { data, error } = await supabaseAdmin.storage
+      .from("destination-images")
+      .createSignedUrl(objectPath, expiresIn);
+
+    if (!error && data?.signedUrl) {
+      urls[requestedPath] = data.signedUrl;
+    }
+  }
+
+  return res.json({ urls });
 });
 
 const contactMessageSchema = z.object({
@@ -1152,7 +1549,7 @@ app.post("/api/owner/bookings/:bookingId/status", requireSupabaseUser, requireOw
   try {
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from("bookings")
-      .select("id, boat_id, status")
+      .select("id, boat_id, status, stripe_payment_intent_id")
       .eq("id", bookingId)
       .maybeSingle();
 
@@ -1176,6 +1573,12 @@ app.post("/api/owner/bookings/:bookingId/status", requireSupabaseUser, requireOw
 
     if (!boat || !boat.owner_id || boat.owner_id !== ownerProfile.id) {
       return res.status(403).json({ error: "You can only manage bookings on your own boats" });
+    }
+
+    if (status === "confirmed" && !String(booking.stripe_payment_intent_id ?? "").trim()) {
+      return res.status(400).json({
+        error: "Cannot confirm booking without verified Stripe payment intent.",
+      });
     }
 
     const { error: updateError } = await supabaseAdmin
@@ -1271,16 +1674,17 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
 
   const { data: boatById, error: boatByIdError } = await supabaseAdmin
     .from("boats")
-    .select("id, name, owner_id, price_per_day, departure_marina, flash_sale_enabled, type")
+    .select("id, name, owner_id, departure_marina, flash_sale_enabled, type")
     .eq("id", boatId)
     .maybeSingle();
 
   let boat = boatById;
+  let partySector = null;
 
   if (!boat && boatName) {
     const { data: boatByName, error: boatByNameError } = await supabaseAdmin
       .from("boats")
-      .select("id, name, owner_id, price_per_day, flash_sale_enabled, type")
+      .select("id, name, owner_id, departure_marina, flash_sale_enabled, type")
       .eq("name", boatName)
       .limit(1)
       .maybeSingle();
@@ -1299,6 +1703,47 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
       }
 
       return res.status(500).json({ error: `Boat lookup failed: ${message}` });
+    }
+  }
+
+  if (!boat && isPartyBookingFromClient) {
+    const { data: partyById } = await supabaseAdmin
+      .from("party_boats")
+      .select("id, boat_id, owner_id, name, departure_marina, flash_sale_enabled, party_event_date, party_event_time")
+      .eq("id", boatId)
+      .maybeSingle();
+
+    if (partyById) {
+      partySector = partyById;
+      boat = {
+        id: partyById.id,
+        name: partyById.name,
+        owner_id: partyById.owner_id,
+        departure_marina: partyById.departure_marina,
+        flash_sale_enabled: partyById.flash_sale_enabled,
+        type: "party",
+      };
+    }
+  }
+
+  if (!boat && isPartyBookingFromClient && boatName) {
+    const { data: partyByName } = await supabaseAdmin
+      .from("party_boats")
+      .select("id, boat_id, owner_id, name, departure_marina, flash_sale_enabled, party_event_date, party_event_time")
+      .eq("name", boatName)
+      .limit(1)
+      .maybeSingle();
+
+    if (partyByName) {
+      partySector = partyByName;
+      boat = {
+        id: partyByName.id,
+        name: partyByName.name,
+        owner_id: partyByName.owner_id,
+        departure_marina: partyByName.departure_marina,
+        flash_sale_enabled: partyByName.flash_sale_enabled,
+        type: "party",
+      };
     }
   }
 
@@ -1322,15 +1767,17 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
     return res.status(404).json({ error: "Boat not found" });
   }
 
-  const dynamicPrice = Number(boat.price_per_day ?? 0);
-  if (!Number.isFinite(dynamicPrice) || dynamicPrice <= 0) {
-    return res.status(400).json({ error: "Boat has no valid dynamic price (expected price_per_day)" });
-  }
+  const isPartyType = String(boat?.type ?? "").toLowerCase().includes("party");
+  const isPartyBookingResolved = Boolean(isPartyBookingFromClient || isPartyType || partySector);
 
   const hasPreDiscountTotal = Number.isFinite(preDiscountTotalFromClient ?? NaN) && (preDiscountTotalFromClient ?? 0) > 0;
   const baseTotalPrice = hasPreDiscountTotal
     ? Number(preDiscountTotalFromClient)
-    : (Number.isFinite(totalPriceFromClient ?? NaN) && (totalPriceFromClient ?? 0) > 0 ? Number(totalPriceFromClient) : dynamicPrice);
+    : (Number.isFinite(totalPriceFromClient ?? NaN) && (totalPriceFromClient ?? 0) > 0 ? Number(totalPriceFromClient) : 0);
+
+  if (!Number.isFinite(baseTotalPrice) || baseTotalPrice <= 0) {
+    return res.status(400).json({ error: "Missing total price. Add at least one package before checkout." });
+  }
 
   const { data: ownerRaw, error: ownerError } = await supabaseAdmin
     .from("users")
@@ -1365,7 +1812,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
     return res.status(400).json({ error: "Invalid departure time" });
   }
 
-  const bookingEndTime = Boolean(boat.party_ready)
+  const bookingEndTime = isPartyBookingResolved
     ? addHoursAllowWrap(selectedDepartureTime, selectedPackageHours)
     : addHoursWithoutOvernightWrap(selectedDepartureTime, selectedPackageHours);
   if (!bookingEndTime) {
@@ -1392,7 +1839,32 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   const applicationFeeAmount = Math.round(amountCents * 0.2);
   const platformCommission = applicationFeeAmount / 100;
   const ownerPayout = Math.max(0, logicalAmountDueNow - platformCommission);
-  const isPartyBooking = Boolean(boat.party_ready);
+  const isPartyBooking = isPartyBookingResolved;
+  let bookingBoatIdForPersistence = boat.id;
+  if (isPartyBooking) {
+    const candidates = Array.from(
+      new Set(
+        [String(partySector?.boat_id ?? "").trim(), String(boat.id ?? "").trim()].filter(Boolean),
+      ),
+    );
+
+    if (candidates.length > 0) {
+      const { data: candidateBoats } = await supabaseAdmin
+        .from("boats")
+        .select("id")
+        .in("id", candidates);
+
+      const existingBoatIds = new Set((candidateBoats ?? []).map((row) => String(row.id ?? "").trim()).filter(Boolean));
+      const chosen = candidates.find((id) => existingBoatIds.has(id));
+      if (chosen) {
+        bookingBoatIdForPersistence = chosen;
+      } else {
+        return res.status(400).json({
+          error: "Party boat is not linked to a rental boat id. Set party_boats.boat_id to a valid boats.id and retry checkout.",
+        });
+      }
+    }
+  }
   const partyTicketCode = isPartyBooking ? generatePartyTicketCode() : null;
   const resolvedGuestCount = Math.max(1, Number(guests ?? 1));
   const partyTicketCount = isPartyBooking ? resolvedGuestCount : 0;
@@ -1447,150 +1919,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   const selectedEndTime = `${endHour}:${endMinute}`;
 
   const normalizedCustomerEmail = customerEmail?.trim().toLowerCase();
-
-  const holdMinutesRaw = Number(process.env.STRIPE_PENDING_HOLD_MINUTES ?? 5);
-  const holdMinutes = Number.isFinite(holdMinutesRaw) && holdMinutesRaw > 0 ? holdMinutesRaw : 5;
-  const staleCutoffIso = new Date(Date.now() - (holdMinutes * 60 * 1000)).toISOString();
-  await supabaseAdmin
-    .from("bookings")
-    .update({ status: "cancelled" })
-    .eq("boat_id", boat.id)
-    .eq("start_date", selectedDate)
-    .eq("status", "pending")
-    .lt("created_at", staleCutoffIso)
-    .is("stripe_payment_intent_id", null);
-
-  await supabaseAdmin
-    .from("bookings")
-    .update({ status: "cancelled" })
-    .eq("boat_id", boat.id)
-    .eq("start_date", selectedDate)
-    .eq("status", "pending")
-    .is("departure_time", null)
-    .lt("created_at", staleCutoffIso)
-    .is("stripe_payment_intent_id", null);
-
-  const findReusablePendingBooking = async () => {
-    if (normalizedCustomerEmail) {
-      const { data: byEmail } = await supabaseAdmin
-        .from("bookings")
-        .select("id")
-        .eq("boat_id", boat.id)
-        .eq("start_date", selectedDate)
-        .eq("departure_time", selectedDepartureTime)
-        .eq("status", "pending")
-        .eq("customer_email", normalizedCustomerEmail)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (byEmail) {
-        return byEmail;
-      }
-    }
-
-    const { data: byNullEmail } = await supabaseAdmin
-      .from("bookings")
-      .select("id")
-      .eq("boat_id", boat.id)
-      .eq("start_date", selectedDate)
-      .eq("departure_time", selectedDepartureTime)
-      .eq("status", "pending")
-      .is("customer_email", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    return byNullEmail ?? null;
-  };
-
-  let bookingRow = null;
-  bookingRow = await findReusablePendingBooking();
-
-  if (!bookingRow) {
-    const ownerDisplayName = owner.full_name || owner.name || owner.email || "Owner";
-    const customerNameFromEmail = normalizedCustomerEmail
-      ? normalizedCustomerEmail.split("@")[0] || "Guest"
-      : "Guest";
-
-    const { data: createdBooking, error: bookingError } = await supabaseAdmin
-      .from("bookings")
-      .insert({
-        boat_id: boat.id,
-        customer_id: resolvedCustomerId,
-        customer_email: normalizedCustomerEmail ?? null,
-        start_date: selectedDate,
-        end_date: bookingEndDate,
-        departure_time: selectedDepartureTime,
-        start_time: selectedDepartureTime,
-        end_time: selectedEndTime,
-        package_hours: selectedPackageHours,
-          total_price: discountedTotal,
-        status: "pending",
-        // Hydrated identity & experience fields
-        boat_name: boat.name,
-        owner_name: ownerDisplayName,
-        customer_name: customerNameFromEmail,
-        package_label: "Stripe checkout",
-        guests: resolvedGuestCount,
-        departure_marina: boat.departure_marina ?? "",
-        extras: [],
-        notes: "",
-        // Money & payment metadata
-        payment_method: "stripe",
-        payment_plan: paymentPlan || "full",
-        amount_due_now: logicalAmountDueNow,
-        deposit_amount: depositAmount,
-        platform_commission: platformCommission,
-        owner_payout: ownerPayout,
-        subtotal_after_voucher: subtotalAfterVoucher,
-        party_ticket_code: partyTicketCode,
-        party_ticket_count: partyTicketCount,
-        party_ticket_status: partyTicketStatus,
-        // Party tier selection
-        ...(isPartyBooking ? {
-          party_event_date: partyEventDate ?? null,
-          party_event_time: partyEventTime ?? null,
-          party_tier_selected: partyTierSelected ?? null,
-          party_tier_price: partyTierPrice ?? null,
-        } : {}),
-      })
-      .select("id")
-      .single();
-
-    if (bookingError || !createdBooking) {
-      const message = bookingError?.message ?? "Failed to create pending booking";
-      if (message.includes("OVERLAP_BLOCKED")) {
-        const fallbackPending = await findReusablePendingBooking();
-
-        if (fallbackPending) {
-          bookingRow = fallbackPending;
-        } else {
-          return res.status(409).json({ error: message });
-        }
-      } else {
-        return res.status(500).json({ error: message });
-      }
-    }
-
-    if (createdBooking) {
-      bookingRow = createdBooking;
-    }
-  }
-
-  if (bookingRow && (resolvedCustomerId || normalizedCustomerEmail)) {
-    try {
-      await supabaseAdmin
-        .from("bookings")
-        .update({
-          ...(resolvedCustomerId ? { customer_id: resolvedCustomerId } : {}),
-          ...(normalizedCustomerEmail ? { customer_email: normalizedCustomerEmail } : {}),
-        })
-        .eq("id", bookingRow.id);
-    } catch {
-      // If we cannot persist identity enrichment, continue with existing booking row.
-    }
-  }
+  const checkoutReference = `chk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   try {
     const appBaseUrl = process.env.APP_BASE_URL ?? process.env.DEPLOY_PRIME_URL ?? "https://your-deployed-netlify-site.netlify.app";
@@ -1626,14 +1955,14 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
               destination: owner.stripe_account_id,
             },
             metadata: {
-              bookingId: bookingRow.id,
               boatId: boat.id,
+              checkoutReference,
             },
           }
         : {
             metadata: {
-              bookingId: bookingRow.id,
               boatId: boat.id,
+              checkoutReference,
               payoutMode: "platform_only",
             },
           };
@@ -1641,9 +1970,35 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
       return stripe.checkout.sessions.create({
         ...baseSessionPayload,
         metadata: {
-          boatId: boat.id,
+          boatId: bookingBoatIdForPersistence || "",
           ownerId: owner.id,
-          bookingId: bookingRow.id,
+          checkoutReference,
+          bookingDate: selectedDate,
+          bookingEndDate,
+          departureTime: selectedDepartureTime,
+          endTime: selectedEndTime,
+          packageHours: String(selectedPackageHours),
+          guests: String(resolvedGuestCount),
+          boatName: boat.name,
+          departureMarina: boat.departure_marina ?? "",
+          paymentPlan: paymentPlan || "full",
+          totalPrice: String(discountedTotal),
+          amountDueNow: String(logicalAmountDueNow),
+          depositAmount: String(depositAmount),
+          platformCommission: String(platformCommission),
+          ownerPayout: String(ownerPayout),
+          customerId: resolvedCustomerId || "",
+          customerEmail: normalizedCustomerEmail || "",
+          customerName: normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest",
+          packageLabel: "Stripe checkout",
+          isPartyBooking: String(Boolean(isPartyBooking)),
+          partyTicketCode: partyTicketCode ?? "",
+          partyTicketCount: String(partyTicketCount),
+          partyTicketStatus: partyTicketStatus ?? "",
+          partyEventDate: isPartyBooking ? (partyEventDate ?? "") : "",
+          partyEventTime: isPartyBooking ? (partyEventTime ?? "") : "",
+          partyTierSelected: isPartyBooking ? (partyTierSelected ?? "") : "",
+          partyTierPrice: isPartyBooking ? String(partyTierPrice ?? 0) : "0",
           payoutMode,
         },
         payment_intent_data: paymentIntentData,
@@ -1676,15 +2031,65 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
       }
     }
 
-    await supabaseAdmin
+    const stripePaymentIntentId =
+      typeof checkoutSession.payment_intent === "string"
+        ? checkoutSession.payment_intent
+        : (checkoutSession.payment_intent && typeof checkoutSession.payment_intent === "object" && typeof checkoutSession.payment_intent.id === "string"
+            ? checkoutSession.payment_intent.id
+            : null);
+
+    const pendingBookingPayload = {
+      boat_id: bookingBoatIdForPersistence,
+      customer_id: resolvedCustomerId,
+      customer_name: normalizedCustomerEmail ? (normalizedCustomerEmail.split("@")[0] || "Guest") : "Guest",
+      customer_email: normalizedCustomerEmail || null,
+      start_date: selectedDate,
+      end_date: bookingEndDate,
+      departure_time: selectedDepartureTime,
+      start_time: selectedDepartureTime,
+      end_time: selectedEndTime,
+      package_hours: selectedPackageHours,
+      // Do not hold time slots before verified payment.
+      // Booking remains cancelled until Stripe confirms payment, then webhook/by-session flow upgrades it to confirmed.
+      status: "cancelled",
+      total_price: discountedTotal,
+      boat_name: boat.name || "",
+      owner_name: owner.full_name || owner.name || "Owner",
+      package_label: isPartyBooking ? "Party tickets" : "Stripe checkout",
+      guests: resolvedGuestCount,
+      departure_marina: boat.departure_marina ?? "",
+      extras: [],
+      notes: "",
+      payment_method: null,
+      payment_plan: paymentPlan || "full",
+      amount_due_now: logicalAmountDueNow,
+      deposit_amount: depositAmount,
+      platform_commission: platformCommission,
+      owner_payout: ownerPayout,
+      request_id: checkoutReference,
+      stripe_session_id: checkoutSession.id,
+      stripe_payment_intent_id: stripePaymentIntentId,
+      ...(isPartyBooking ? {
+        party_ticket_code: partyTicketCode,
+        party_ticket_count: partyTicketCount,
+        party_ticket_status: partyTicketStatus,
+      } : {}),
+    };
+
+    const { data: pendingBooking, error: pendingBookingError } = await supabaseAdmin
       .from("bookings")
-      .update({ stripe_session_id: checkoutSession.id })
-      .eq("id", bookingRow.id);
+      .insert(pendingBookingPayload)
+      .select("id")
+      .maybeSingle();
+
+    if (pendingBookingError) {
+      return res.status(500).json({ error: pendingBookingError.message || "Failed to create pending booking" });
+    }
 
     return res.json({
       sessionId: checkoutSession.id,
       checkoutUrl: checkoutSession.url,
-      bookingId: bookingRow.id,
+      bookingId: pendingBooking?.id ?? null,
       amount: logicalAmountDueNow,
       commissionAmount: platformCommission,
       ownerStripeAccountId: owner.stripe_account_id,
@@ -1694,11 +2099,6 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
       flashSaleDiscount,
     });
   } catch (error) {
-    await supabaseAdmin
-      .from("bookings")
-      .update({ status: "cancelled" })
-      .eq("id", bookingRow.id);
-
     const message = error instanceof Error ? error.message : "Failed to create Stripe Checkout session";
     return res.status(500).json({ error: message });
   }
@@ -1945,7 +2345,7 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
 
   const { data: bookingBySessionId, error: bookingBySessionError } = await supabaseAdmin
     .from("bookings")
-    .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status, party_event_date, party_event_time, party_tier_selected, party_tier_price")
+    .select("id, boat_id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, stripe_payment_intent_id, party_ticket_code, party_ticket_count, party_ticket_status")
     .eq("stripe_session_id", sessionId)
     .maybeSingle();
 
@@ -1959,7 +2359,7 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
       if (bookingIdFromMetadata) {
         const { data: bookingById } = await supabaseAdmin
           .from("bookings")
-          .select("id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, party_ticket_code, party_ticket_count, party_ticket_status, party_event_date, party_event_time, party_tier_selected, party_tier_price")
+          .select("id, boat_id, boat_name, start_date, departure_time, amount_due_now, total_price, customer_id, customer_email, status, stripe_session_id, stripe_payment_intent_id, party_ticket_code, party_ticket_count, party_ticket_status")
           .eq("id", bookingIdFromMetadata)
           .maybeSingle();
 
@@ -1991,6 +2391,28 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
     return res.status(404).json({ error: "Booking not found for this session" });
   }
 
+  let partyDetails = null;
+  if (booking.party_ticket_code || booking.boat_id) {
+    const partyLookupId = booking.boat_id;
+    const { data: partyById } = await supabaseAdmin
+      .from("party_boats")
+      .select("id, party_event_date, party_event_time, party_tiers")
+      .eq("id", partyLookupId)
+      .maybeSingle();
+
+    if (partyById) {
+      partyDetails = partyById;
+    } else {
+      const { data: partyByBoatId } = await supabaseAdmin
+        .from("party_boats")
+        .select("boat_id, party_event_date, party_event_time, party_tiers")
+        .eq("boat_id", partyLookupId)
+        .maybeSingle();
+
+      partyDetails = partyByBoatId;
+    }
+  }
+
   const user = req.supabaseUser;
   const userEmail = normalizeEmail(user.email);
   const bookingEmail = normalizeEmail(booking.customer_email);
@@ -2001,8 +2423,93 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
     return res.status(403).json({ error: "You are not allowed to access this booking." });
   }
 
+  let stripePaymentStatus = "unknown";
+  let stripeCheckoutStatus = "unknown";
+  let stripeCheckoutUrl = "";
+  let stripePaymentIntentId = String(booking.stripe_payment_intent_id ?? "").trim();
+  let stripePaymentIntentStatus = "unknown";
+
+  if (hasValidStripeConfig) {
+    try {
+      const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
+      stripePaymentStatus = String(stripeSession?.payment_status ?? "unknown");
+      stripeCheckoutStatus = String(stripeSession?.status ?? "unknown");
+      const sessionPaymentIntentId =
+        typeof stripeSession?.payment_intent === "string"
+          ? stripeSession.payment_intent
+          : (stripeSession?.payment_intent && typeof stripeSession.payment_intent === "object" && typeof stripeSession.payment_intent.id === "string"
+              ? stripeSession.payment_intent.id
+              : "");
+      if (sessionPaymentIntentId) {
+        stripePaymentIntentId = sessionPaymentIntentId;
+      }
+
+      if (stripePaymentIntentId) {
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+          stripePaymentIntentStatus = String(paymentIntent?.status ?? "unknown").toLowerCase();
+        } catch {
+          // Keep unknown when PaymentIntent lookup fails.
+        }
+      }
+
+      if (stripeCheckoutStatus === "open" && typeof stripeSession?.url === "string") {
+        stripeCheckoutUrl = stripeSession.url;
+      }
+    } catch {
+      // Keep unknown statuses when Stripe lookup fails.
+    }
+  }
+
   const amount = Number(booking.amount_due_now ?? booking.total_price ?? 0);
-  const ownerNotified = String(booking.status).toLowerCase() === "confirmed";
+  const hasPaymentIntentRef = Boolean(String(stripePaymentIntentId ?? "").trim());
+  const hasStripeRefs = Boolean(String(booking.stripe_session_id ?? "").trim()) && hasPaymentIntentRef;
+
+  const bookingStatus = String(booking.status).toLowerCase();
+
+  if (bookingStatus === "confirmed" && !hasPaymentIntentRef) {
+    await supabaseAdmin
+      .from("bookings")
+      .update({
+        status: "cancelled",
+        stripe_session_id: sessionId,
+        stripe_payment_intent_id: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", booking.id);
+    booking.status = "cancelled";
+  }
+
+  if (hasValidStripeConfig && stripePaymentStatus === "paid" && bookingStatus !== "confirmed" && hasStripeRefs) {
+    await supabaseAdmin
+      .from("bookings")
+      .update({
+        status: "confirmed",
+        stripe_session_id: sessionId,
+        stripe_payment_intent_id: stripePaymentIntentId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", booking.id);
+    booking.status = "confirmed";
+  }
+
+  if (hasValidStripeConfig && stripeCheckoutStatus === "expired" && bookingStatus === "pending") {
+    await supabaseAdmin
+      .from("bookings")
+      .update({
+        status: "cancelled",
+        stripe_session_id: sessionId,
+        stripe_payment_intent_id: stripePaymentIntentId || booking.stripe_payment_intent_id || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", booking.id);
+    booking.status = "cancelled";
+  }
+
+  const normalizedBookingStatus = String(booking.status).toLowerCase();
+  const paymentCompleted = stripePaymentStatus === "paid" || stripePaymentIntentStatus === "succeeded";
+  const paymentVerified = normalizedBookingStatus === "confirmed" && paymentCompleted && hasPaymentIntentRef;
+  const ownerNotified = paymentVerified;
   const emailQueued = Boolean(booking.customer_email);
   const isPartyBooking = Boolean(booking.party_ticket_code);
 
@@ -2012,16 +2519,23 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
     date: booking.start_date || "",
     departure: booking.departure_time || "",
     amount,
+    paymentVerified,
+    bookingStatus: normalizedBookingStatus,
+    stripePaymentStatus,
+    stripePaymentIntentStatus,
+    stripeCheckoutStatus,
+    stripeCheckoutUrl,
+    stripePaymentIntentId,
     ownerNotified,
     emailQueued,
     bookingType: isPartyBooking ? "party" : "rental",
     partyTicketCode: booking.party_ticket_code || "",
     partyTicketCount: Number(booking.party_ticket_count ?? 0),
     partyTicketStatus: booking.party_ticket_status || "",
-    partyEventDate: booking.party_event_date || "",
-    partyEventTime: booking.party_event_time || "",
-    partyTierSelected: booking.party_tier_selected || "",
-    partyTierPrice: Number(booking.party_tier_price ?? 0),
+    partyEventDate: partyDetails?.party_event_date || booking.start_date || "",
+    partyEventTime: partyDetails?.party_event_time || booking.departure_time || "",
+    partyTierSelected: "",
+    partyTierPrice: 0,
   });
 });
 

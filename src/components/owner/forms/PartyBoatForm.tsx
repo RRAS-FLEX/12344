@@ -91,9 +91,7 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
     pricePerEvent: boat?.ticketPricePerPerson ?? 120,
     maxEventHours: 8,
     eventSetupTime: 1,
-    cancelPolicy: 7,
     mapQuery: boat?.mapQuery ?? "",
-    flashSaleEnabled: boat?.flashSaleEnabled ?? false,
     image: boat?.image ?? "",
     status: boat?.status ?? "active",
     partyEventDate: boat?.partyEventDate ?? "",
@@ -153,9 +151,7 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
       pricePerEvent: boat?.ticketPricePerPerson ?? 120,
       maxEventHours: 8,
       eventSetupTime: 1,
-      cancelPolicy: 7,
       mapQuery: boat?.mapQuery ?? "",
-      flashSaleEnabled: boat?.flashSaleEnabled ?? false,
       image: boat?.image ?? "",
       status: boat?.status ?? "active",
       partyEventDate: boat?.partyEventDate ?? "",
@@ -336,7 +332,6 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
         ticketMaxPeople: Number(formData.capacity),
         ticketPricePerPerson: Number.isFinite(ticketPricePerPerson) ? Number(ticketPricePerPerson.toFixed(2)) : 0,
         mapQuery: formData.mapQuery,
-        flashSaleEnabled: formData.flashSaleEnabled,
         partyReady: true,
         partyEventDate: formData.partyEventDate || null,
         partyEventTime: formData.partyEventTime || null,
@@ -774,18 +769,6 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Flash Sales */}
-            <div className="flex items-center gap-2 p-3 border rounded-lg">
-              <Checkbox
-                id="flash-sale"
-                checked={formData.flashSaleEnabled}
-                onCheckedChange={(checked) => setFormData({ ...formData, flashSaleEnabled: checked as boolean })}
-              />
-              <Label htmlFor="flash-sale" className="cursor-pointer">
-                {tl("Enable flash sales (30% off for last-minute bookings)", "Ενεργοποίηση flash sales (30% έκπτωση για τελευταίες κρατήσεις)")}
-              </Label>
             </div>
 
             {/* Navigation */}

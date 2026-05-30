@@ -2,6 +2,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 
 const ABSOLUTE_URL = /^https?:\/\//i;
 const DATA_URL = /^data:/i;
+const STORAGE_OBJECT_PATH = /^\/?storage\/v1\/object\/(public|sign)\/([^/]+)\/(.+)$/i;
 const KNOWN_BUCKETS = new Set([
   "boat-images",
   "destination-images",
@@ -40,6 +41,14 @@ export const parseStorageReference = (
     return null;
   }
 
+  const relativeStorageMatch = trimmed.match(STORAGE_OBJECT_PATH);
+  if (relativeStorageMatch) {
+    const [, , bucket, rawPath] = relativeStorageMatch;
+    const cleanPath = String(rawPath ?? "").split("?")[0].replace(/^\/+/, "");
+    if (!cleanPath) return null;
+    return { bucket, path: cleanPath };
+  }
+
   const bucketPrefix = `${defaultBucket}/`;
   if (trimmed.startsWith(bucketPrefix)) {
     return {
@@ -75,6 +84,13 @@ export const resolveStorageImage = (
 
   if (ABSOLUTE_URL.test(trimmed) || DATA_URL.test(trimmed)) {
     return trimmed;
+  }
+
+  const relativeStorageMatch = trimmed.match(STORAGE_OBJECT_PATH);
+  if (relativeStorageMatch) {
+    const [, , bucket, rawPath] = relativeStorageMatch;
+    const cleanPath = String(rawPath ?? "").split("?")[0].replace(/^\/+/, "");
+    return getPublicStorageUrl(bucket, cleanPath) || fallback;
   }
 
   const bucketPrefix = `${defaultBucket}/`;
