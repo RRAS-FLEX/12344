@@ -29,6 +29,13 @@ import { useToast } from "@/hooks/use-toast";
 import { getUserAvatarUrl, uploadUserAvatar } from "@/lib/profile-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
+interface StripeConnectStatus {
+  isReady: boolean;
+  detailsSubmitted: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+}
+
 const OwnerProfile = () => {
   const { tl } = useLanguage();
   const { user } = useCurrentUser();
@@ -50,11 +57,12 @@ const OwnerProfile = () => {
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState(user?.name ?? "");
+  const [profilePhone, setProfilePhone] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  const [stripeStatus, setStripeStatus] = useState<any | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
   const [isStripeStatusLoading, setIsStripeStatusLoading] = useState(true);
-  const payoutsReady = Boolean((stripeStatus as any)?.isReady);
+  const payoutsReady = Boolean(stripeStatus?.isReady);
 
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -82,6 +90,18 @@ const OwnerProfile = () => {
 
     loadData();
   }, []);
+
+  // Load the owner's phone number (not part of the AuthUser hook, kept local to this page).
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadPhone = async () => {
+      const { data } = await supabase.from("users").select("phone").eq("id", user.id).maybeSingle();
+      setProfilePhone(data?.phone ?? "");
+    };
+
+    loadPhone();
+  }, [user?.id]);
 
   // Keep profile name in sync with user
   useEffect(() => {
@@ -126,7 +146,7 @@ const OwnerProfile = () => {
           data: { session },
         } = await supabase.auth.getSession();
 
-        const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL?.trim?.() ?? "";
+        const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
         const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
         const statusUrl = `${base}/api/stripe/connect/status`;
 
@@ -233,9 +253,9 @@ const OwnerProfile = () => {
     try {
       setIsSavingProfile(true);
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("users")
-        .update({ name: trimmedName, updated_at: new Date().toISOString() })
+        .update({ name: trimmedName, phone: profilePhone.trim() || null, updated_at: new Date().toISOString() })
         .eq("id", user.id);
 
       if (error) {
@@ -411,6 +431,16 @@ const OwnerProfile = () => {
                         <MapPin className="h-4 w-4 text-aegean" />
                         Based in Thassos, Greece
                       </p>
+                      {isEditingProfile ? (
+                        <input
+                          value={profilePhone}
+                          onChange={(event) => setProfilePhone(event.target.value)}
+                          className="h-10 w-full max-w-sm rounded-md border border-border bg-background px-3 text-sm text-foreground"
+                          placeholder={tl("Phone number (so we can reach you about bookings)", "Τηλέφωνο (για επικοινωνία σχετικά με κρατήσεις)")}
+                        />
+                      ) : profilePhone ? (
+                        <p className="text-sm text-muted-foreground">{profilePhone}</p>
+                      ) : null}
                       {isEditingProfile ? (
                         <div className="flex flex-wrap items-center gap-2 pt-1">
                           <Button

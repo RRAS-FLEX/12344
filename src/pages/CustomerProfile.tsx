@@ -17,7 +17,9 @@ const CustomerProfile = () => {
   const { tl } = useLanguage();
   const { user } = useCurrentUser();
   const { toast } = useToast();
-  const [bookings, setBookings] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<
+    Array<{ id: string; boat_name: string | null; start_date: string; status: string }>
+  >([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -32,7 +34,7 @@ const CustomerProfile = () => {
   useEffect(() => {
     const loadBookings = async () => {
       if (!user?.id) return;
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("bookings")
         .select("id, boat_name, start_date, status")
         .eq("customer_id", user.id)
@@ -130,7 +132,7 @@ const CustomerProfile = () => {
     try {
       setIsSavingProfile(true);
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("users")
         .update({ name: trimmedName, updated_at: new Date().toISOString() })
         .eq("id", user.id);

@@ -211,6 +211,10 @@ const Chat = () => {
     };
 
     load();
+    // sessionUser/boat/ownerName/tl are read for one-shot setup logic here; their
+    // identities change every render, and loadOwnerInbox/reloadActiveThread are
+    // recreated each render too, so only the stable primitive keys are tracked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser?.id, isOwnerMode, boatReference, boat?.id]);
 
   useEffect(() => {
@@ -237,6 +241,10 @@ const Chat = () => {
     return () => {
       window.clearInterval(intervalId);
     };
+    // loadOwnerInbox/reloadActiveThread/sessionUser are recreated every render;
+    // adding them here would tear down and restart the 10s poll interval on
+    // every render instead of only when these primitive keys actually change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser?.id, isOwnerMode, isSending, thread?.id, threadIdFromQuery]);
 
   const handleSend = async () => {

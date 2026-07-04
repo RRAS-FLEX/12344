@@ -14,6 +14,7 @@ const KNOWN_BUCKETS = new Set([
   "payment-receipts",
   "support-attachments",
   "temp-uploads",
+  "news-images",
 ]);
 
 const encodeStoragePath = (path: string) =>

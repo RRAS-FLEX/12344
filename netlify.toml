@@ -1,8 +1,13 @@
 [build]
   command = "npm run build"
   publish = "dist"
-  # If you later migrate server endpoints to Netlify Functions, point functions to a folder like "netlify/functions"
-  # functions = "netlify/functions"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

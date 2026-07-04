@@ -86,6 +86,9 @@ export const RoutingDataProvider = ({ children }: { children: ReactNode }) => {
 };
 
 /** Hook to use the routing-data context from any component inside the router. */
+// Co-locating the hook with its Provider is intentional; splitting it out would only
+// churn imports across many consumers for a dev-only Fast Refresh optimization.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useRoutingData = (): RoutingDataContextValue => {
   const ctx = useContext(RoutingDataContext);
   if (!ctx) {

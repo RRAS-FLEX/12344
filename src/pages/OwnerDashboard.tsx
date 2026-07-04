@@ -18,6 +18,13 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { supabase } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
 
+interface StripeConnectStatus {
+  isReady: boolean;
+  detailsSubmitted: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+}
+
 const OwnerDashboard = () => {
   const { tl } = useLanguage();
   const { user } = useCurrentUser();
@@ -31,9 +38,9 @@ const OwnerDashboard = () => {
   const [editingBoat, setEditingBoat] = useState<OwnerBoat | undefined>(undefined);
   const [isStripeConnectLoading, setIsStripeConnectLoading] = useState(false);
   const [stripeConnectError, setStripeConnectError] = useState<string | null>(null);
-  const [stripeStatus, setStripeStatus] = useState<any | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
   const [isStripeStatusLoading, setIsStripeStatusLoading] = useState(true);
-  const payoutsReady = Boolean((stripeStatus as any)?.isReady);
+  const payoutsReady = Boolean(stripeStatus?.isReady);
   const hasStripeStatus = stripeStatus !== null;
 
   const getBookingEndDateTime = (booking: OwnerBooking): Date | null => {
@@ -98,7 +105,7 @@ const OwnerDashboard = () => {
           data: { session },
         } = await supabase.auth.getSession();
 
-        const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL?.trim?.() ?? "";
+        const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
         const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
         const statusUrl = `${base}/api/stripe/connect/status`;
 
@@ -141,7 +148,7 @@ const OwnerDashboard = () => {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL?.trim?.() ?? "";
+      const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
       const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
       const accountsUrl = `${base}/api/stripe/connect/accounts`;
       const onboardingUrl = `${base}/api/stripe/connect/onboarding-link`;

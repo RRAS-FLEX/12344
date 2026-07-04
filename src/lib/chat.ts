@@ -1,4 +1,5 @@
-﻿import { supabase } from "./supabase";
+﻿import type { User } from "@supabase/supabase-js";
+import { supabase, type DatabaseTables } from "./supabase";
 
 export type MessageSender = "customer" | "owner";
 
@@ -32,11 +33,12 @@ export interface ChatThreadSummary {
   lastMessageText: string;
 }
 
-const toReadableChatError = (error: any, fallback: string) => {
-  const message = String(error?.message ?? fallback);
+const toReadableChatError = (error: unknown, fallback: string) => {
+  const errorLike = error as { message?: string; code?: string } | null | undefined;
+  const message = String(errorLike?.message ?? fallback);
   const normalized = message.toLowerCase();
 
-  if (error?.code === "42P01" || normalized.includes("relation") && normalized.includes("chat_")) {
+  if (errorLike?.code === "42P01" || normalized.includes("relation") && normalized.includes("chat_")) {
     return "Chat tables are missing. Run supabase_full_app_migration.sql in Supabase SQL editor.";
   }
 
@@ -59,7 +61,7 @@ const getSignedInSession = async () => {
   return session;
 };
 
-const ensureCustomerProfile = async (session: { user: any }) => {
+const ensureCustomerProfile = async (session: { user: User }) => {
   const email = session.user?.email?.trim?.().toLowerCase?.();
   if (!email) {
     throw new Error("Supabase user is missing an email address");
@@ -70,7 +72,7 @@ const ensureCustomerProfile = async (session: { user: any }) => {
     email.split("@")[0] ||
     "Nautiplex User";
 
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("users")
     .upsert(
       {
@@ -86,7 +88,7 @@ const ensureCustomerProfile = async (session: { user: any }) => {
   }
 };
 
-const mapMessage = (message: any): ChatMessage => ({
+const mapMessage = (message: DatabaseTables["chat_messages"]["Row"]): ChatMessage => ({
   id: message.id,
   boatId: message.boat_id,
   sender: message.sender_role,
@@ -95,7 +97,7 @@ const mapMessage = (message: any): ChatMessage => ({
 });
 
 const getOwnerBoatMap = async (ownerId: string) => {
-  const { data: boats, error } = await (supabase as any)
+  const { data: boats, error } = await supabase
     .from("boats")
     .select("id, owner_id")
     .eq("owner_id", ownerId);
@@ -113,7 +115,7 @@ const getCustomerNameMap = async (customerIds: string[]) => {
     return new Map<string, string>();
   }
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("users")
     .select("id, name")
     .in("id", customerIds);
@@ -143,8 +145,8 @@ export const getOrCreateThread = async (boatId: string, boatName: string, ownerN
 
   const session = await getSignedInSession();
   await ensureCustomerProfile(session);
-  const threadsTable = (supabase as any).from("chat_threads");
-  const messagesTable = (supabase as any).from("chat_messages");
+  const threadsTable = supabase.from("chat_threads");
+  const messagesTable = supabase.from("chat_messages");
 
   let { data: thread } = await threadsTable
     .select("*")
@@ -207,7 +209,7 @@ export const getThreadById = async (threadId: string): Promise<ChatThread> => {
   }
 
   const session = await getSignedInSession();
-  const { data: thread, error: threadError } = await (supabase as any)
+  const { data: thread, error: threadError } = await supabase
     .from("chat_threads")
     .select("*")
     .eq("id", threadId)
@@ -222,7 +224,7 @@ export const getThreadById = async (threadId: string): Promise<ChatThread> => {
     await ensureOwnerCanAccessThread(session.user.id, thread.boat_id);
   }
 
-  const { data: messageRows, error: messageError } = await (supabase as any)
+  const { data: messageRows, error: messageError } = await supabase
     .from("chat_messages")
     .select("*")
     .eq("thread_id", thread.id)
@@ -255,7 +257,7 @@ export const getOwnerThreads = async (): Promise<ChatThreadSummary[]> => {
     return [];
   }
 
-  const { data: threadRows, error: threadError } = await (supabase as any)
+  const { data: threadRows, error: threadError } = await supabase
     .from("chat_threads")
     .select("id, boat_id, boat_name, owner_name, customer_id, last_updated_at")
     .in("boat_id", boatIds)
@@ -274,7 +276,7 @@ export const getOwnerThreads = async (): Promise<ChatThreadSummary[]> => {
   const customerIds = [...new Set(threads.map((thread) => String(thread.customer_id)).filter(Boolean))];
   const customerNameMap = await getCustomerNameMap(customerIds);
 
-  const { data: messageRows } = await (supabase as any)
+  const { data: messageRows } = await supabase
     .from("chat_messages")
     .select("thread_id, text, created_at")
     .in("thread_id", threadIds)
@@ -310,7 +312,7 @@ export const addMessageToThread = async (
   }
 
   const session = await getSignedInSession();
-  const { data: thread, error: threadError } = await (supabase as any)
+  const { data: thread, error: threadError } = await supabase
     .from("chat_threads")
     .select("id, boat_id, customer_id")
     .eq("id", threadId)
@@ -329,7 +331,7 @@ export const addMessageToThread = async (
     await ensureOwnerCanAccessThread(session.user.id, thread.boat_id);
   }
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("chat_messages")
     .insert({
       thread_id: thread.id,
@@ -345,7 +347,7 @@ export const addMessageToThread = async (
     throw new Error(toReadableChatError(error, "Failed to send message"));
   }
 
-  await (supabase as any).from("chat_threads").update({ last_updated_at: data.created_at }).eq("id", thread.id);
+  await supabase.from("chat_threads").update({ last_updated_at: data.created_at }).eq("id", thread.id);
   return mapMessage(data);
 };
 

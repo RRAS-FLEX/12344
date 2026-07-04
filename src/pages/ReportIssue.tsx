@@ -152,6 +152,8 @@ const ReportIssue = () => {
 
   useEffect(() => {
     void loadRecentReports();
+    // loadRecentReports is recreated every render; only reporterEmail should trigger a reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reporterEmail]);
 
   const typeMeta = useMemo(() => reportTypeMeta[reportType], [reportType]);

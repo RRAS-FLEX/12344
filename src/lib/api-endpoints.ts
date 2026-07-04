@@ -52,7 +52,7 @@ const buildEndpointCandidates = (relativePath: string, apiBaseUrl?: string, netl
 };
 
 export const resolveStripeCheckoutEndpoints = (apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
-  buildEndpointCandidates("/api/stripe/create-checkout", apiBaseUrl, "/.netlify/functions/create-checkout");
+  buildEndpointCandidates("/api/stripe/create-checkout", apiBaseUrl);
 
 export const resolveBookingLookupEndpoints = (apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
   buildEndpointCandidates("/api/bookings/by-stripe-session", apiBaseUrl);

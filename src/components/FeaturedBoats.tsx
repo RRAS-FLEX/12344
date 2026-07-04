@@ -115,6 +115,10 @@ const FeaturedBoats = ({ searchCriteria }: FeaturedBoatsProps) => {
     return () => {
       isActive = false;
     };
+    // promotedBoatIdsKey is a stable derived key for filteredBoats; depending on
+    // filteredBoats directly would re-run this on every render since it's a new
+    // array reference each time, even when its contents haven't changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [promotedBoatIdsKey]);
 
   useEffect(() => {

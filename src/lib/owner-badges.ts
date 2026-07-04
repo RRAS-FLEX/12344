@@ -37,7 +37,7 @@ export const getOwnerBadgesForBoat = async (boatId: string): Promise<OwnerBadge[
     return [];
   }
 
-  const owner = (data as any).owner as
+  const owner = (data as { owner?: unknown }).owner as
     | {
         owner_badges?: {
           assigned_at: string;

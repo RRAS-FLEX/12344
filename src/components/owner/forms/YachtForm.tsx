@@ -125,6 +125,9 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
     return () => {
       cancelled = true;
     };
+    // Load location options once on mount; formData.locationId is only read here
+    // to avoid overwriting an existing selection, not to re-trigger the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

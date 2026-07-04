@@ -52,9 +52,11 @@ const PackageManagement = () => {
     };
 
     loadData();
+    // Load packages/boats once on mount; selectedBoatId is only read here, not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleOpenForm = (pkg?: any) => {
+  const handleOpenForm = (pkg?: OwnerPackage) => {
     if (pkg) {
       setFormData(pkg);
       setEditingId(pkg.id);

@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, type DatabaseTables } from "./supabase";
 
 export interface BusinessTicket {
   id: string;
@@ -10,7 +10,7 @@ export interface BusinessTicket {
   createdAt: string;
   status: "new" | "reviewing" | "approved";
 }
-const mapTicket = (ticket: any): BusinessTicket => ({
+const mapTicket = (ticket: DatabaseTables["business_tickets"]["Row"]): BusinessTicket => ({
   id: ticket.id,
   businessName: ticket.business_name,
   businessType: ticket.business_type,
@@ -22,7 +22,7 @@ const mapTicket = (ticket: any): BusinessTicket => ({
 });
 
 export const listBusinessTickets = async (): Promise<BusinessTicket[]> => {
-  const { data, error } = await (supabase as any).from("business_tickets").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase.from("business_tickets").select("*").order("created_at", { ascending: false });
   if (error) {
     throw new Error(error.message || "Failed to load business tickets");
   }
@@ -30,7 +30,7 @@ export const listBusinessTickets = async (): Promise<BusinessTicket[]> => {
 };
 
 export const addBusinessTicket = async (ticket: Omit<BusinessTicket, "id" | "createdAt" | "status">): Promise<BusinessTicket> => {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("business_tickets")
     .insert({
       business_name: ticket.businessName,

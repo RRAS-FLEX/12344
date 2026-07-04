@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP_STATUS:%{http_code}\\\\n\" \"http://desk-jojos.tail9d3e44.ts.net:8080/\" --max-time 10)",
+      "Bash(curl -s -o /dev/null -w \"HTTP_STATUS:%{http_code}\\\\n\" \"http://localhost:8080/\" --max-time 5)",
+      "Bash(npx playwright *)",
+      "Bash(node \"C:\\\\Users\\\\Jojos\\\\AppData\\\\Local\\\\Temp2\\\\claude\\\\c--Users-Jojos-Documents-GitHub-sea-nautiq-journey\\\\bb46b67d-a778-4189-af01-90b70005a306\\\\scratchpad\\\\live-check.mjs\")",
+      "Bash(cp \"C:\\\\Users\\\\Jojos\\\\AppData\\\\Local\\\\Temp2\\\\claude\\\\c--Users-Jojos-Documents-GitHub-sea-nautiq-journey\\\\bb46b67d-a778-4189-af01-90b70005a306\\\\scratchpad\\\\live-check.mjs\" \"c:\\\\Users\\\\Jojos\\\\Documents\\\\GitHub\\\\sea-nautiq-journey\\\\live-check.mjs\")",
+      "Bash(node live-check.mjs)",
+      "Bash(ls \"C:\\\\Users\\\\Jojos\\\\AppData\\\\Local\\\\ms-playwright\" 2>&1)",
+      "Read(//c/Users/Jojos/AppData/Local/ms-playwright/**)",
+      "Bash(find \"C:\\\\Users\\\\Jojos\\\\AppData\\\\Local\\\\ms-playwright\\\\chromium-1228\" -iname \"*.exe\" 2>&1 | head -5 *)",
+      "Read(//c/Users/Jojos/AppData/Local/ms-playwright/chromium-1228/**)",
+      "Read(//c/Users/Jojos/AppData/Local/ms-playwright/chromium_headless_shell-1228/**)",
+      "Bash(xargs grep -l \"Link\")",
+      "Bash(node check-about.mjs)",
+      "Bash(node check-booking-flow.mjs)",
+      "Bash(xargs grep -l \"calendar_events\")",
+      "Bash(xargs grep -l \"INSERT INTO.*calendar_events\\\\|insert into calendar_events\")",
+      "Bash(grep -E \"^pg$|^pg-\")",
+      "Bash(node -e \"require.resolve\\('pg'\\)\")"
+    ]
+  }
+}

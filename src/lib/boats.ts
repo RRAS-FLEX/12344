@@ -413,7 +413,7 @@ const mapRow = (
 	const resolvedImages = resolveBoatImages(row, options?.signedImageUrls);
 	
 	// Use the aliased 'owner' relationship if available, fallback to 'users' for backward compatibility
-	const ownerData = (row as any).owner || row.users;
+	const ownerData = row.owner || row.users;
 	
 	// Ensure we have owner data - use the owner relationship if available
 	const ownerName = ownerData?.name?.trim() || "Owner";

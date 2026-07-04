@@ -48,6 +48,9 @@ const CalendarManagement = () => {
     };
 
     loadBoats();
+    // Load the boat list once on mount; selectedBoatId is only read here to avoid
+    // clobbering an existing selection, not to re-trigger the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -244,7 +247,7 @@ const CalendarManagement = () => {
 
                     <div className="space-y-2">
                       <Label htmlFor="type">Event Type</Label>
-                      <Select value={eventType} onValueChange={(value) => setEventType(value as any)}>
+                      <Select value={eventType} onValueChange={(value) => setEventType(value as "booked" | "blocked" | "maintenance")}>
                         <SelectTrigger id="type">
                           <SelectValue />
                         </SelectTrigger>

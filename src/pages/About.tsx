@@ -121,7 +121,7 @@ const About = () => {
         setDestinationsCount(typeof dests === "number" ? dests : 0);
 
         if (Array.isArray(ratingRows) && ratingRows.length > 0) {
-          const sum = ratingRows.reduce((total, row: any) => total + Number(row.rating ?? 0), 0);
+          const sum = ratingRows.reduce((total, row) => total + Number(row.rating ?? 0), 0);
           const avg = sum / ratingRows.length;
           setAverageRating(Number.isFinite(avg) ? parseFloat(avg.toFixed(1)) : null);
         } else {
@@ -186,7 +186,7 @@ const About = () => {
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null as any);
+        const payload = await response.json().catch(() => null);
         const errorMessage = payload?.error || "Failed to send your message. Please try again later.";
         throw new Error(errorMessage);
       }

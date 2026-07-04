@@ -73,12 +73,12 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
   }
 
   const [bookingsResult, reviewsResult] = await Promise.all([
-    (supabase as any)
+    supabase
       .from("bookings")
       .select("id, boat_id, boat_name, owner_name, package_label, created_at, start_date, departure_time, departure_marina, status, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, extras, notes")
       .eq("customer_id", session.user.id)
       .order("start_date", { ascending: false }),
-    (supabase as any)
+    supabase
       .from("reviews")
       .select("booking_id, rating, title, comment, created_at")
       .eq("customer_id", session.user.id),
@@ -92,17 +92,17 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
     throw new Error(reviewsResult.error.message || "Failed to load review history");
   }
 
-  const reviewsByBookingId = new Map<string, any>();
+  const reviewsByBookingId = new Map<string, { rating: number; title: string; comment: string; created_at: string }>();
   if (Array.isArray(reviewsResult.data)) {
     for (const review of reviewsResult.data) {
-      const bookingId = String((review as any)?.booking_id ?? "").trim();
+      const bookingId = String(review.booking_id ?? "").trim();
       if (!bookingId) continue;
       reviewsByBookingId.set(bookingId, review);
     }
   }
 
   return Array.isArray(bookingsResult.data)
-    ? bookingsResult.data.map((booking: any) => ({
+    ? bookingsResult.data.map((booking) => ({
         id: booking.id,
         boatId: booking.boat_id,
         boatName: booking.boat_name ?? "Boat",
@@ -144,7 +144,7 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
 
   const ownerId = session.user.id;
 
-  const { data: ownerBoats, error: boatsError } = await (supabase as any)
+  const { data: ownerBoats, error: boatsError } = await supabase
     .from("boats")
     .select("id")
     .eq("owner_id", ownerId);
@@ -154,14 +154,14 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
   }
 
   const boatIds = Array.isArray(ownerBoats)
-    ? ownerBoats.map((boat: any) => boat.id).filter(Boolean)
+    ? ownerBoats.map((boat) => boat.id).filter(Boolean)
     : [];
 
   if (boatIds.length === 0) {
     return [];
   }
 
-  const { data: bookingsData, error: bookingsError } = await (supabase as any)
+  const { data: bookingsData, error: bookingsError } = await supabase
     .from("bookings")
     .select("id, boat_id, boat_name, customer_name, package_label, created_at, start_date, departure_time, departure_marina, status, total_price, payment_method, payment_plan, amount_due_now, deposit_amount, platform_commission, owner_payout, extras, notes")
     .in("boat_id", boatIds)
@@ -172,12 +172,12 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
   }
 
   const bookingIds = Array.isArray(bookingsData)
-    ? bookingsData.map((booking: any) => booking.id).filter(Boolean)
+    ? bookingsData.map((booking) => booking.id).filter(Boolean)
     : [];
 
-  const reviewsByBookingId = new Map<string, any>();
+  const reviewsByBookingId = new Map<string, { rating: number; title: string; comment: string; created_at: string }>();
   if (bookingIds.length > 0) {
-    const { data: reviewsData, error: reviewsError } = await (supabase as any)
+    const { data: reviewsData, error: reviewsError } = await supabase
       .from("reviews")
       .select("booking_id, rating, title, comment, created_at")
       .in("booking_id", bookingIds);
@@ -188,7 +188,7 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
 
     if (Array.isArray(reviewsData)) {
       for (const review of reviewsData) {
-        const bookingId = String((review as any)?.booking_id ?? "").trim();
+        const bookingId = String(review.booking_id ?? "").trim();
         if (!bookingId) continue;
         reviewsByBookingId.set(bookingId, review);
       }
@@ -196,7 +196,7 @@ export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> =
   }
 
   return Array.isArray(bookingsData)
-    ? bookingsData.map((booking: any) => ({
+    ? bookingsData.map((booking) => ({
         id: booking.id,
         boatId: booking.boat_id,
         boatName: booking.boat_name ?? "Boat",

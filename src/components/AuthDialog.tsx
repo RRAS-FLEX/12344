@@ -62,6 +62,8 @@ const AuthDialog = ({ open, onOpenChange, onAuthenticated }: AuthDialogProps) =>
     if (errorMessage) {
       setErrorMessage("");
     }
+    // Only clear the error when the tab changes, not whenever errorMessage itself is set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   const onAuthSuccess = (user: AuthUser) => {

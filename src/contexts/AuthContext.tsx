@@ -46,4 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   return <AuthContext.Provider value={{ user, isLoading }}>{children}</AuthContext.Provider>;
 };
 
+// Co-locating the hook with its Provider is intentional; splitting it out would only
+// churn imports across ~36 consumers for a dev-only Fast Refresh optimization.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

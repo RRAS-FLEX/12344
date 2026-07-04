@@ -11,6 +11,13 @@ export type Database = {
           email: string;
           name: string;
           is_owner: boolean;
+          owner_title: string | null;
+          owner_bio: string | null;
+          owner_languages: string[] | null;
+          is_superhost: boolean | null;
+          response_rate: number | null;
+          stripe_payouts_ready: boolean | null;
+          phone: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -19,6 +26,13 @@ export type Database = {
           email: string;
           name: string;
           is_owner?: boolean;
+          owner_title?: string | null;
+          owner_bio?: string | null;
+          owner_languages?: string[] | null;
+          is_superhost?: boolean | null;
+          response_rate?: number | null;
+          stripe_payouts_ready?: boolean | null;
+          phone?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -27,8 +41,16 @@ export type Database = {
           email?: string;
           name?: string;
           is_owner?: boolean;
+          owner_title?: string | null;
+          owner_bio?: string | null;
+          owner_languages?: string[] | null;
+          is_superhost?: boolean | null;
+          response_rate?: number | null;
+          stripe_payouts_ready?: boolean | null;
+          phone?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       boats: {
         Row: {
@@ -51,6 +73,18 @@ export type Database = {
           status: "active" | "inactive" | "maintenance";
           bookings: number;
           revenue: number;
+          length_meters: number | null;
+          year: number | null;
+          cruising_speed_knots: number | null;
+          fuel_burn_litres_per_hour: number | null;
+          departure_marina: string | null;
+          cancellation_policy: string | null;
+          response_time: string | null;
+          map_query: string | null;
+          external_calendar_url: string | null;
+          flash_sale_enabled: boolean | null;
+          unavailable_dates: string[] | null;
+          min_notice_hours: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -74,6 +108,18 @@ export type Database = {
           status?: "active" | "inactive" | "maintenance";
           bookings?: number;
           revenue?: number;
+          length_meters?: number | null;
+          year?: number | null;
+          cruising_speed_knots?: number | null;
+          fuel_burn_litres_per_hour?: number | null;
+          departure_marina?: string | null;
+          cancellation_policy?: string | null;
+          response_time?: string | null;
+          map_query?: string | null;
+          external_calendar_url?: string | null;
+          flash_sale_enabled?: boolean | null;
+          unavailable_dates?: string[] | null;
+          min_notice_hours?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -96,9 +142,22 @@ export type Database = {
           stripe_link?: string | null;
           status?: "active" | "inactive" | "maintenance";
           bookings?: number;
+          length_meters?: number | null;
+          year?: number | null;
+          cruising_speed_knots?: number | null;
+          fuel_burn_litres_per_hour?: number | null;
+          departure_marina?: string | null;
+          cancellation_policy?: string | null;
+          response_time?: string | null;
+          map_query?: string | null;
+          external_calendar_url?: string | null;
+          flash_sale_enabled?: boolean | null;
+          unavailable_dates?: string[] | null;
+          min_notice_hours?: number | null;
           revenue?: number;
           updated_at?: string;
         };
+        Relationships: [];
       };
       boat_locations: {
         Row: {
@@ -126,6 +185,7 @@ export type Database = {
           latitude?: number | null;
           longitude?: number | null;
         };
+        Relationships: [];
       };
       boat_features: {
         Row: {
@@ -143,6 +203,7 @@ export type Database = {
         Update: {
           feature?: string;
         };
+        Relationships: [];
       };
       boat_documents: {
         Row: {
@@ -164,12 +225,19 @@ export type Database = {
         Update: {
           name?: string;
         };
+        Relationships: [];
       };
       bookings: {
         Row: {
           id: string;
           boat_id: string;
           customer_id: string | null;
+          customer_name: string | null;
+          customer_email: string | null;
+          boat_name: string | null;
+          owner_name: string | null;
+          package_label: string | null;
+          guests: number | null;
           start_date: string;
           end_date: string;
           start_time: string | null;
@@ -179,6 +247,20 @@ export type Database = {
           departure_marina: string | null;
           status: "pending" | "confirmed" | "completed" | "cancelled";
           total_price: number;
+          payment_method: string | null;
+          payment_plan: string | null;
+          amount_due_now: number | null;
+          deposit_amount: number | null;
+          platform_commission: number | null;
+          owner_payout: number | null;
+          extras: unknown;
+          notes: string | null;
+          request_id: string | null;
+          stripe_session_id: string | null;
+          stripe_payment_intent_id: string | null;
+          party_ticket_code: string | null;
+          party_ticket_count: number | null;
+          party_ticket_status: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -186,6 +268,12 @@ export type Database = {
           id?: string;
           boat_id: string;
           customer_id?: string | null;
+          customer_name?: string | null;
+          customer_email?: string | null;
+          boat_name?: string | null;
+          owner_name?: string | null;
+          package_label?: string | null;
+          guests?: number | null;
           start_date: string;
           end_date: string;
           start_time?: string | null;
@@ -195,11 +283,31 @@ export type Database = {
           departure_marina?: string | null;
           status?: "pending" | "confirmed" | "completed" | "cancelled";
           total_price: number;
+          payment_method?: string | null;
+          payment_plan?: string | null;
+          amount_due_now?: number | null;
+          deposit_amount?: number | null;
+          platform_commission?: number | null;
+          owner_payout?: number | null;
+          extras?: unknown;
+          notes?: string | null;
+          request_id?: string | null;
+          stripe_session_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          party_ticket_code?: string | null;
+          party_ticket_count?: number | null;
+          party_ticket_status?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: {
           customer_id?: string | null;
+          customer_name?: string | null;
+          customer_email?: string | null;
+          boat_name?: string | null;
+          owner_name?: string | null;
+          package_label?: string | null;
+          guests?: number | null;
           start_date?: string;
           end_date?: string;
           start_time?: string | null;
@@ -209,14 +317,30 @@ export type Database = {
           departure_marina?: string | null;
           status?: "pending" | "confirmed" | "completed" | "cancelled";
           total_price?: number;
+          payment_method?: string | null;
+          payment_plan?: string | null;
+          amount_due_now?: number | null;
+          deposit_amount?: number | null;
+          platform_commission?: number | null;
+          owner_payout?: number | null;
+          extras?: unknown;
+          notes?: string | null;
+          request_id?: string | null;
+          stripe_session_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          party_ticket_code?: string | null;
+          party_ticket_count?: number | null;
+          party_ticket_status?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       calendar_events: {
         Row: {
           id: string;
           user_id: string;
           title: string;
+          event_type: string | null;
           description: string | null;
           location: string | null;
           start_time: string;
@@ -232,6 +356,7 @@ export type Database = {
           id?: string;
           user_id: string;
           title: string;
+          event_type?: string | null;
           description?: string | null;
           location?: string | null;
           start_time: string;
@@ -246,6 +371,7 @@ export type Database = {
         Update: {
           user_id?: string;
           title?: string;
+          event_type?: string | null;
           description?: string | null;
           location?: string | null;
           start_time?: string;
@@ -257,6 +383,7 @@ export type Database = {
           booking_id?: string | null;
           boat_id?: string | null;
         };
+        Relationships: [];
       };
       admin_users: {
         Row: {
@@ -271,7 +398,8 @@ export type Database = {
           email: string;
           created_at?: string;
         };
-        Update: {};
+        Update: Record<string, never>;
+        Relationships: [];
       };
       reviews: {
         Row: {
@@ -294,6 +422,7 @@ export type Database = {
           rating?: number;
           comment?: string;
         };
+        Relationships: [];
       };
       favorites: {
         Row: {
@@ -314,6 +443,7 @@ export type Database = {
           boat_id?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       badges: {
         Row: {
@@ -333,6 +463,7 @@ export type Database = {
           icon_slug?: string;
           description?: string | null;
         };
+        Relationships: [];
       };
       boat_owner_badges: {
         Row: {
@@ -348,11 +479,515 @@ export type Database = {
         Update: {
           assigned_at?: string;
         };
+        Relationships: [];
+      };
+      party_boats: {
+        Row: {
+          id: string;
+          boat_id: string;
+          owner_id: string;
+          name: string;
+          location: string;
+          description: string | null;
+          departure_marina: string | null;
+          capacity: number;
+          ticket_max_people: number | null;
+          ticket_price_per_person: number | null;
+          party_tiers: unknown;
+          party_event_date: string | null;
+          party_event_time: string | null;
+          images: string | null;
+          status: string;
+          map_query: string | null;
+          flash_sale_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          boat_id: string;
+          owner_id: string;
+          name: string;
+          location: string;
+          description?: string | null;
+          departure_marina?: string | null;
+          capacity?: number;
+          ticket_max_people?: number | null;
+          ticket_price_per_person?: number | null;
+          party_tiers?: unknown;
+          party_event_date?: string | null;
+          party_event_time?: string | null;
+          images?: string | null;
+          status?: string;
+          map_query?: string | null;
+          flash_sale_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          boat_id?: string;
+          owner_id?: string;
+          name?: string;
+          location?: string;
+          description?: string | null;
+          departure_marina?: string | null;
+          capacity?: number;
+          ticket_max_people?: number | null;
+          ticket_price_per_person?: number | null;
+          party_tiers?: unknown;
+          party_event_date?: string | null;
+          party_event_time?: string | null;
+          images?: string | null;
+          status?: string;
+          map_query?: string | null;
+          flash_sale_enabled?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      watersports_boats: {
+        Row: {
+          id: string;
+          boat_id: string;
+          owner_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          boat_id: string;
+          owner_id: string;
+          created_at?: string;
+        };
+        Update: {
+          boat_id?: string;
+          owner_id?: string;
+        };
+        Relationships: [];
+      };
+      owner_packages: {
+        Row: {
+          id: string;
+          owner_id: string;
+          name: string;
+          duration_hours: number;
+          price: number;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          duration_hours: number;
+          price: number;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          duration_hours?: number;
+          price?: number;
+          description?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      owner_package_boats: {
+        Row: {
+          package_id: string;
+          boat_id: string;
+        };
+        Insert: {
+          package_id: string;
+          boat_id: string;
+        };
+        Update: {
+          package_id?: string;
+          boat_id?: string;
+        };
+        Relationships: [];
+      };
+      owner_extras: {
+        Row: {
+          id: string;
+          owner_id: string;
+          name: string;
+          price: number;
+          description: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          owner_id: string;
+          name: string;
+          price: number;
+          description?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          price?: number;
+          description?: string | null;
+        };
+        Relationships: [];
+      };
+      owner_extra_boats: {
+        Row: {
+          extra_id: string;
+          boat_id: string;
+        };
+        Insert: {
+          extra_id: string;
+          boat_id: string;
+        };
+        Update: {
+          extra_id?: string;
+          boat_id?: string;
+        };
+        Relationships: [];
+      };
+      business_tickets: {
+        Row: {
+          id: string;
+          business_name: string;
+          business_type: "hotel" | "travel-agent" | "villa" | "other";
+          contact_name: string;
+          contact_email: string;
+          message: string;
+          status: "new" | "reviewing" | "approved";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          business_name: string;
+          business_type: "hotel" | "travel-agent" | "villa" | "other";
+          contact_name: string;
+          contact_email: string;
+          message: string;
+          status?: "new" | "reviewing" | "approved";
+          created_at?: string;
+        };
+        Update: {
+          status?: "new" | "reviewing" | "approved";
+        };
+        Relationships: [];
+      };
+      chat_threads: {
+        Row: {
+          id: string;
+          boat_id: string;
+          boat_name: string;
+          owner_name: string;
+          customer_id: string;
+          created_at: string;
+          last_updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          boat_id: string;
+          boat_name: string;
+          owner_name: string;
+          customer_id: string;
+          created_at?: string;
+          last_updated_at?: string;
+        };
+        Update: {
+          last_updated_at?: string;
+        };
+        Relationships: [];
+      };
+      chat_messages: {
+        Row: {
+          id: string;
+          thread_id: string;
+          boat_id: string;
+          sender_role: "customer" | "owner";
+          sender_user_id: string;
+          text: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          thread_id: string;
+          boat_id: string;
+          sender_role: "customer" | "owner";
+          sender_user_id: string;
+          text: string;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      destinations: {
+        Row: {
+          id: string;
+          slug: string;
+          name: string;
+          images: string | null;
+          boats: number | null;
+          description: string | null;
+          best_for: string | null;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          name: string;
+          images?: string | null;
+          boats?: number | null;
+          description?: string | null;
+          best_for?: string | null;
+        };
+        Update: {
+          name?: string;
+          images?: string | null;
+          boats?: number | null;
+          description?: string | null;
+          best_for?: string | null;
+        };
+        Relationships: [];
+      };
+      booking_requests: {
+        Row: {
+          id: string;
+          boat_id: string;
+          boat_name: string;
+          owner_id: string;
+          owner_name: string | null;
+          customer_id: string | null;
+          customer_name: string;
+          customer_email: string;
+          start_date: string;
+          departure_time: string;
+          end_time: string | null;
+          package_hours: number | null;
+          guests: number;
+          package_label: string | null;
+          special_requests: string | null;
+          total_price: number;
+          status: "pending" | "accepted" | "rejected";
+          admin_notes: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          boat_id: string;
+          boat_name: string;
+          owner_id: string;
+          owner_name?: string | null;
+          customer_id?: string | null;
+          customer_name: string;
+          customer_email: string;
+          start_date: string;
+          departure_time: string;
+          end_time?: string | null;
+          package_hours?: number | null;
+          guests?: number;
+          package_label?: string | null;
+          special_requests?: string | null;
+          total_price?: number;
+          status?: "pending" | "accepted" | "rejected";
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          boat_id?: string;
+          boat_name?: string;
+          owner_id?: string;
+          owner_name?: string | null;
+          status?: "pending" | "accepted" | "rejected";
+          admin_notes?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      news_posts: {
+        Row: {
+          id: string;
+          slug: string;
+          title: string;
+          excerpt: string;
+          content: string;
+          category: "nautiplex" | "thassos";
+          cover_image: string | null;
+          author_name: string | null;
+          status: "draft" | "published";
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          title: string;
+          excerpt: string;
+          content: string;
+          category: "nautiplex" | "thassos";
+          cover_image?: string | null;
+          author_name?: string | null;
+          status?: "draft" | "published";
+          published_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          slug?: string;
+          title?: string;
+          excerpt?: string;
+          content?: string;
+          category?: "nautiplex" | "thassos";
+          cover_image?: string | null;
+          author_name?: string | null;
+          status?: "draft" | "published";
+          published_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      global_settings: {
+        Row: {
+          key: string;
+          value: string | number | null;
+        };
+        Insert: {
+          key: string;
+          value?: string | number | null;
+        };
+        Update: {
+          value?: string | number | null;
+        };
+        Relationships: [];
+      };
+      report_tickets: {
+        Row: {
+          id: string;
+          report_type: "customer" | "owner" | "boat" | "website";
+          subject: string;
+          target_name: string;
+          target_ref: string | null;
+          reporter_name: string;
+          reporter_email: string;
+          severity: "low" | "medium" | "high" | "critical";
+          message: string;
+          page_url: string | null;
+          metadata: Record<string, unknown>;
+          status: "new" | "triaged" | "resolved";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          report_type: "customer" | "owner" | "boat" | "website";
+          subject: string;
+          target_name: string;
+          target_ref?: string | null;
+          reporter_name: string;
+          reporter_email: string;
+          severity: "low" | "medium" | "high" | "critical";
+          message: string;
+          page_url?: string | null;
+          metadata?: Record<string, unknown>;
+          status?: "new" | "triaged" | "resolved";
+          created_at?: string;
+        };
+        Update: {
+          status?: "new" | "triaged" | "resolved";
+        };
+        Relationships: [];
+      };
+      owner_applications: {
+        Row: {
+          id: string;
+          type: string;
+          applicant_user_id: string;
+          owner_name: string;
+          owner_email: string;
+          title: string;
+          notes: string | null;
+          status: "pending" | "approved" | "rejected";
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          type: string;
+          applicant_user_id: string;
+          owner_name: string;
+          owner_email: string;
+          title: string;
+          notes?: string | null;
+          status?: "pending" | "approved" | "rejected";
+          submitted_at?: string;
+        };
+        Update: {
+          status?: "pending" | "approved" | "rejected";
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
+      owner_notifications: {
+        Row: {
+          id: string;
+          booking_id: string;
+          owner_name: string;
+          owner_email: string;
+          subject: string;
+          message: string;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          booking_id: string;
+          owner_name: string;
+          owner_email: string;
+          subject: string;
+          message: string;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+        };
+        Relationships: [];
+      };
+      customer_emails: {
+        Row: {
+          id: string;
+          booking_id: string;
+          to_email: string;
+          subject: string;
+          preview_text: string | null;
+          body: string;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          booking_id: string;
+          to_email: string;
+          subject: string;
+          preview_text?: string | null;
+          body: string;
+          status?: string;
+          created_at?: string;
+        };
+        Update: {
+          status?: string;
+        };
+        Relationships: [];
       };
     };
-    Views: {};
-    Functions: {};
-    Enums: {};
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
   };
 };
 

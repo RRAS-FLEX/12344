@@ -21,6 +21,8 @@ const Boats = lazy(() => import("./pages/Boats.tsx"));
 const BoatsMap = lazy(() => import("./pages/BoatsMap.tsx"));
 const BoatDetails = lazy(() => import("./pages/BoatDetails.tsx"));
 const DestinationsPage = lazy(() => import("./pages/DestinationsPage.tsx"));
+const News = lazy(() => import("./pages/News.tsx"));
+const NewsArticle = lazy(() => import("./pages/NewsArticle.tsx"));
 const About = lazy(() => import("./pages/About.tsx"));
 const OwnerProfile = lazy(() => import("./pages/OwnerProfile.tsx"));
 const OwnerDashboard = lazy(() => import("./pages/OwnerDashboard.tsx"));
@@ -28,6 +30,7 @@ const CustomerProfile = lazy(() => import("./pages/CustomerProfile.tsx"));
 const ContactOwner = lazy(() => import("./pages/ContactOwner.tsx"));
 const Booking = lazy(() => import("./pages/Booking.tsx"));
 const BookingClosed = lazy(() => import("./pages/BookingClosed.tsx"));
+const BookingRequested = lazy(() => import("./pages/BookingRequested.tsx"));
 const BookingConfirmed = lazy(() => import("./pages/BookingConfirmed.tsx"));
 const Chat = lazy(() => import("./pages/Chat.tsx"));
 const History = lazy(() => import("./pages/History.tsx"));
@@ -201,6 +204,8 @@ const AppRoutes = () => (
           <Route path="/boats-map" element={<BoatsMap />} />
           <Route path="/boats/:boatRef" element={<BoatDetails />} />
           <Route path="/destinations" element={<DestinationsPage />} />
+          <Route path="/news" element={<News />} />
+          <Route path="/news/:slug" element={<NewsArticle />} />
           <Route path="/about" element={<About />} />
           <Route path="/owner-profile" element={<OwnerRoute><OwnerProfile /></OwnerRoute>} />
           <Route path="/owner-dashboard" element={<OwnerRoute><OwnerDashboard /></OwnerRoute>} />
@@ -214,6 +219,7 @@ const AppRoutes = () => (
           <Route path="/contact-owner" element={<ContactOwner />} />
           <Route path="/booking" element={<Booking />} />
           <Route path="/booking-closed" element={<BookingClosed />} />
+          <Route path="/booking-requested" element={<BookingRequested />} />
           <Route path="/booking-confirmed" element={<BookingConfirmed />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/become-owner" element={<BecomeOwner />} />

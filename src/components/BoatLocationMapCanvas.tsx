@@ -8,9 +8,9 @@ import MarkerClusterGroup from "react-leaflet-cluster";
 import type { MapCoordinates } from "@/lib/map-locations";
 import type { ResolvedBoatLocationMapPoint } from "./BoatLocationMap";
 
-const LeafletMapContainer = MapContainer as any;
-const LeafletTileLayer = TileLayer as any;
-const LeafletMarker = Marker as any;
+const LeafletMapContainer = MapContainer;
+const LeafletTileLayer = TileLayer;
+const LeafletMarker = Marker;
 
 interface BoatLocationMapCanvasProps {
   points: ResolvedBoatLocationMapPoint[];

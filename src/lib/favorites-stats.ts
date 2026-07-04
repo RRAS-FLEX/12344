@@ -6,7 +6,7 @@ export const getBoatFavoriteCountsMap = async (boatIds: string[]): Promise<Recor
     return {};
   }
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("favorites")
     .select("boat_id")
     .in("boat_id", uniqueBoatIds);

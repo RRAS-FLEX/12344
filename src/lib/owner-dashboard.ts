@@ -1,7 +1,14 @@
-import { supabase } from "./supabase";
+import { supabase, type DatabaseTables } from "./supabase";
 import { fetchJsonFromEndpoints, resolveBoatImageSignEndpoints } from "./api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "./storage-public";
 import { uploadBoatImageToStorage } from "./boat-images";
+
+type BoatRow = DatabaseTables["boats"]["Row"];
+type BoatDocumentRow = DatabaseTables["boat_documents"]["Row"];
+type OwnerPackageRow = DatabaseTables["owner_packages"]["Row"];
+type OwnerPackageBoatRow = DatabaseTables["owner_package_boats"]["Row"];
+type OwnerExtraRow = DatabaseTables["owner_extras"]["Row"];
+type OwnerExtraBoatRow = DatabaseTables["owner_extra_boats"]["Row"];
 
 export interface BoatDocument {
   id?: string;
@@ -215,7 +222,7 @@ const resolveDocumentUrl = async (filePath: string) => {
   return data.signedUrl;
 };
 
-const mapBoatDocument = async (document: any): Promise<BoatDocument> => ({
+const mapBoatDocument = async (document: BoatDocumentRow): Promise<BoatDocument> => ({
   id: document.id,
   name: document.name,
   filePath: document.file_path,
@@ -230,7 +237,7 @@ const normalizeBoatImagePath = (value: string | null | undefined) => {
   return `${trimmed.replace(/\/+$/, "")}/1.jpg`;
 };
 
-const getOwnerBoatImageCandidates = (boat: any) => {
+const getOwnerBoatImageCandidates = (boat: BoatRow) => {
   const rawImages = boat.images;
   const legacyImage = boat.image;
 
@@ -262,7 +269,7 @@ const toSignableOwnerBoatImagePath = (value: string) => {
   return parsed.path;
 };
 
-const fetchSignedOwnerBoatImageUrls = async (rows: any[]): Promise<Map<string, string>> => {
+const fetchSignedOwnerBoatImageUrls = async (rows: BoatRow[]): Promise<Map<string, string>> => {
   const uniquePaths = Array.from(
     new Set(
       rows.flatMap((row) =>
@@ -300,7 +307,7 @@ const fetchSignedOwnerBoatImageUrls = async (rows: any[]): Promise<Map<string, s
   }
 };
 
-const resolveOwnerBoatImage = (boat: any, signedImageUrls?: Map<string, string>) => {
+const resolveOwnerBoatImage = (boat: BoatRow, signedImageUrls?: Map<string, string>) => {
   const candidates = getOwnerBoatImageCandidates(boat);
   if (candidates.length === 0) {
     return "/placeholder.svg";
@@ -352,7 +359,7 @@ const uploadBoatDocument = async (basePath: string, document: BoatDocument) => {
 };
 
 const mapOwnerBoat = (
-  boat: any,
+  boat: BoatRow,
   features: string[],
   documents: BoatDocument[],
   signedImageUrls: Map<string, string>,
@@ -398,11 +405,11 @@ const mapOwnerBoat = (
 
 export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
   const session = await getSession();
-  const boatsTable = (supabase as any).from("boats");
-  const featuresTable = (supabase as any).from("boat_features");
-  const documentsTable = (supabase as any).from("boat_documents");
-  const partyBoatsTable = (supabase as any).from("party_boats");
-  const watersportsBoatsTable = (supabase as any).from("watersports_boats");
+  const boatsTable = supabase.from("boats");
+  const featuresTable = supabase.from("boat_features");
+  const documentsTable = supabase.from("boat_documents");
+  const partyBoatsTable = supabase.from("party_boats");
+  const watersportsBoatsTable = supabase.from("watersports_boats");
 
   const { data: boats, error } = await boatsTable
     .select("*")
@@ -470,7 +477,7 @@ export const getOwnerBoats = async (): Promise<OwnerBoat[]> => {
 
       return mapOwnerBoat(
         boat,
-        Array.isArray(featureRows) ? featureRows.map((feature: any) => feature.feature) : [],
+        Array.isArray(featureRows) ? featureRows.map((feature: { feature: string }) => feature.feature) : [],
         resolvedDocuments,
         signedImageUrls,
         partyByBoatId.get(boat.id),
@@ -503,8 +510,8 @@ export const syncBoatSectorRows = async (
     pricePerDay?: number;
   },
 ) => {
-  const partyBoatsTable = (supabase as any).from("party_boats");
-  const watersportsBoatsTable = (supabase as any).from("watersports_boats");
+  const partyBoatsTable = supabase.from("party_boats");
+  const watersportsBoatsTable = supabase.from("watersports_boats");
 
   if (payload.partyReady) {
     try {
@@ -582,9 +589,9 @@ export const syncBoatSectorRows = async (
 
 export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> => {
   const session = await getSession();
-  const boatsTable = (supabase as any).from("boats");
-  const featuresTable = (supabase as any).from("boat_features");
-  const documentsTable = (supabase as any).from("boat_documents");
+  const boatsTable = supabase.from("boats");
+  const featuresTable = supabase.from("boat_features");
+  const documentsTable = supabase.from("boat_documents");
   const safeFeatures = Array.isArray(boat.features) ? boat.features : [];
   const safeDocuments = Array.isArray(boat.documents) ? boat.documents : [];
   const savedStatus = boat.status === "active" ? "inactive" : boat.status;
@@ -625,9 +632,9 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
   if (error || !insertedBoat) {
     // Surface full Supabase error context so callers (and logs) can see
     // which column/value caused database errors such as SQLSTATE 22007.
-    const details = (error as any)?.details || "";
-    const hint = (error as any)?.hint || "";
-    const code = (error as any)?.code || "";
+    const details = error?.details || "";
+    const hint = error?.hint || "";
+    const code = error?.code || "";
     const parts = [error?.message, details, hint, code && `code=${code}`].filter(Boolean);
     throw new Error(parts.join(" | ") || "Failed to add boat");
   }
@@ -662,7 +669,7 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
     ticketPricePerPerson: Number(boat.ticketPricePerPerson ?? 0),
     partyEventDate: boat.partyEventDate ?? null,
     partyEventTime: boat.partyEventTime ?? null,
-    partyTiers: Array.isArray((boat as any).partyTiers) ? (boat as any).partyTiers : [],
+    partyTiers: Array.isArray(boat.partyTiers) ? boat.partyTiers : [],
     image: primaryImagePath,
     status: savedStatus,
     mapQuery: boat.mapQuery,
@@ -712,9 +719,9 @@ export const addOwnerBoat = async (boat: OwnerBoatMutation): Promise<OwnerBoat> 
 
 export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMutation): Promise<OwnerBoat | null> => {
   const session = await getSession();
-  const boatsTable = (supabase as any).from("boats");
-  const featuresTable = (supabase as any).from("boat_features");
-  const documentsTable = (supabase as any).from("boat_documents");
+  const boatsTable = supabase.from("boats");
+  const featuresTable = supabase.from("boat_features");
+  const documentsTable = supabase.from("boat_documents");
 
   const { data: existingBoat, error: existingError } = await boatsTable
     .select("name, created_at, documents_folder, images")
@@ -767,7 +774,7 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   if (updates.skipperRequired !== undefined) boatUpdates.skipper_required = updates.skipperRequired;
   if (updates.status !== undefined) {
     if (updates.status === "active") {
-      const { data: linkedPackages, error: packageError } = await (supabase as any)
+      const { data: linkedPackages, error: packageError } = await supabase
         .from("owner_package_boats")
         .select("package_id, owner_packages!inner(id, owner_id)")
         .eq("boat_id", boatId)
@@ -791,9 +798,9 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
   const { error } = await boatsTable.update(boatUpdates).eq("id", boatId).eq("owner_id", session.user.id);
 
   if (error) {
-    const details = (error as any)?.details || "";
-    const hint = (error as any)?.hint || "";
-    const code = (error as any)?.code || "";
+    const details = error?.details || "";
+    const hint = error?.hint || "";
+    const code = error?.code || "";
     const parts = [error.message, details, hint, code && `code=${code}`].filter(Boolean);
     throw new Error(parts.join(" | ") || "Failed to update boat");
   }
@@ -806,15 +813,15 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
       .eq("owner_id", session.user.id);
 
     if (imageUpdateError) {
-      const details = (imageUpdateError as any)?.details || "";
-      const hint = (imageUpdateError as any)?.hint || "";
-      const code = (imageUpdateError as any)?.code || "";
+      const details = imageUpdateError?.details || "";
+      const hint = imageUpdateError?.hint || "";
+      const code = imageUpdateError?.code || "";
       const parts = [imageUpdateError.message, details, hint, code && `code=${code}`].filter(Boolean);
       throw new Error(parts.join(" | ") || "Failed to save uploaded boat image");
     }
   }
 
-  const partyBoatsTable = (supabase as any).from("party_boats");
+  const partyBoatsTable = supabase.from("party_boats");
   let existingPartySector: PartyBoatSectorRow | null = null;
   const { data: existingPartyById } = await partyBoatsTable
     .select("id, boat_id, ticket_max_people, ticket_price_per_person, party_event_date, party_event_time, party_tiers")
@@ -852,8 +859,8 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
       ticketPricePerPerson: Number(updates.ticketPricePerPerson ?? existingPartySector?.ticket_price_per_person ?? 0),
       partyEventDate: updates.partyEventDate ?? existingPartySector?.party_event_date ?? null,
       partyEventTime: updates.partyEventTime ?? existingPartySector?.party_event_time ?? null,
-      partyTiers: Array.isArray((updates as any).partyTiers)
-        ? (updates as any).partyTiers
+      partyTiers: Array.isArray(updates.partyTiers)
+        ? updates.partyTiers
         : parsePartyTiers(existingPartySector?.party_tiers),
       image: String(updates.image ?? refreshedBaseBoat.images ?? refreshedBaseBoat.image ?? ""),
       status: updates.status ?? refreshedBaseBoat.status,
@@ -904,7 +911,7 @@ export const updateOwnerBoat = async (boatId: string, updates: OwnerBoatUpdateMu
 
 export const deleteOwnerBoat = async (boatId: string): Promise<boolean> => {
   const session = await getSession();
-  const { error } = await (supabase as any).from("boats").delete().eq("id", boatId).eq("owner_id", session.user.id);
+  const { error } = await supabase.from("boats").delete().eq("id", boatId).eq("owner_id", session.user.id);
   if (error) {
     throw new Error(error.message || "Failed to delete boat");
   }
@@ -913,8 +920,8 @@ export const deleteOwnerBoat = async (boatId: string): Promise<boolean> => {
 
 export const getOwnerPackages = async (): Promise<OwnerPackage[]> => {
   const session = await getSession();
-  const packagesTable = (supabase as any).from("owner_packages");
-  const packageBoatsTable = (supabase as any).from("owner_package_boats");
+  const packagesTable = supabase.from("owner_packages");
+  const packageBoatsTable = supabase.from("owner_package_boats");
 
   const { data: packageRows, error } = await packagesTable
     .select("*")
@@ -932,18 +939,18 @@ export const getOwnerPackages = async (): Promise<OwnerPackage[]> => {
 
   const { data: packageBoatRows } = await packageBoatsTable
     .select("package_id, boat_id")
-    .in("package_id", packages.map((pkg: any) => pkg.id));
+    .in("package_id", packages.map((pkg) => pkg.id));
 
-  return packages.map((pkg: any) => ({
+  return packages.map((pkg) => ({
     id: pkg.id,
     name: pkg.name,
     duration: Number(pkg.duration_hours ?? 0),
     price: Number(pkg.price ?? 0),
     description: pkg.description ?? "",
     boatIds: Array.isArray(packageBoatRows)
-      ? packageBoatRows
-          .filter((row: any) => row.package_id === pkg.id)
-          .map((row: any) => row.boat_id)
+      ? (packageBoatRows as OwnerPackageBoatRow[])
+          .filter((row) => row.package_id === pkg.id)
+          .map((row) => row.boat_id)
       : [],
   }));
 };
@@ -954,7 +961,7 @@ export const listBoatPackages = async (
   boatId: string,
 ): Promise<Array<{ id: string; name: string; duration: number; price: number; description: string }>> => {
   const session = await getSession();
-  const packageBoatsTable = (supabase as any).from("owner_package_boats");
+  const packageBoatsTable = supabase.from("owner_package_boats");
 
   const { data, error } = await packageBoatsTable
     .select("owner_packages(id, owner_id, name, duration_hours, price, description)")
@@ -968,11 +975,11 @@ export const listBoatPackages = async (
   const rows = Array.isArray(data) ? data : [];
 
   const corePackages = rows
-    .map((row: any) => row.owner_packages)
-    .filter((pkg: any) =>
-      pkg && (!pkg.description || !String(pkg.description).includes(BOAT_EXTRA_MARKER)),
+    .map((row: { owner_packages: OwnerPackageRow | null }) => row.owner_packages)
+    .filter((pkg): pkg is OwnerPackageRow =>
+      Boolean(pkg) && (!pkg.description || !String(pkg.description).includes(BOAT_EXTRA_MARKER)),
     )
-    .map((pkg: any) => ({
+    .map((pkg) => ({
       id: String(pkg.id),
       name: String(pkg.name ?? "Package"),
       duration: Number(pkg.duration_hours ?? 0),
@@ -986,8 +993,8 @@ export const listBoatPackages = async (
 
 export const listBoatExtras = async (boatId: string): Promise<BoatExtra[]> => {
   const session = await getSession();
-  const extrasTable = (supabase as any).from("owner_extras");
-  const extraBoatsTable = (supabase as any).from("owner_extra_boats");
+  const extrasTable = supabase.from("owner_extras");
+  const extraBoatsTable = supabase.from("owner_extra_boats");
 
   const { data, error } = await extraBoatsTable
     .select("extra_id, owner_extras!inner(id, owner_id, name, price, description)")
@@ -999,7 +1006,7 @@ export const listBoatExtras = async (boatId: string): Promise<BoatExtra[]> => {
   }
 
   return Array.isArray(data)
-    ? data.map((row: any) => ({
+    ? data.map((row: { extra_id: string; owner_extras: OwnerExtraRow }) => ({
         id: row.owner_extras.id,
         name: row.owner_extras.name,
         price: Number(row.owner_extras.price ?? 0),
@@ -1012,8 +1019,8 @@ export const saveBoatExtras = async (
   extras: Array<{ name: string; price: number }>,
 ): Promise<void> => {
   const session = await getSession();
-  const extrasTable = (supabase as any).from("owner_extras");
-  const extraBoatsTable = (supabase as any).from("owner_extra_boats");
+  const extrasTable = supabase.from("owner_extras");
+  const extraBoatsTable = supabase.from("owner_extra_boats");
 
   const sanitizedExtras = extras
     .map((extra) => ({
@@ -1028,7 +1035,7 @@ export const saveBoatExtras = async (
     .eq("boat_id", boatId);
 
   const existingExtraIds = Array.isArray(existingLinks)
-    ? existingLinks.map((row: any) => row.extra_id)
+    ? existingLinks.map((row: { extra_id: string }) => row.extra_id)
     : [];
 
   if (existingExtraIds.length > 0) {
@@ -1062,7 +1069,7 @@ export const saveBoatExtras = async (
   }
 
   const { error: linkError } = await extraBoatsTable.insert(
-    insertedExtras.map((extra: any) => ({
+    insertedExtras.map((extra: { id: string }) => ({
       extra_id: extra.id,
       boat_id: boatId,
     })),
@@ -1078,8 +1085,8 @@ export const saveBoatPackages = async (
   packages: Array<{ name: string; duration: number; price: number; description?: string }>,
 ): Promise<void> => {
   const session = await getSession();
-  const packagesTable = (supabase as any).from("owner_packages");
-  const packageBoatsTable = (supabase as any).from("owner_package_boats");
+  const packagesTable = supabase.from("owner_packages");
+  const packageBoatsTable = supabase.from("owner_package_boats");
 
   const BOAT_EXTRA_MARKER = "[boat-extra]";
 
@@ -1097,13 +1104,15 @@ export const saveBoatPackages = async (
     .eq("boat_id", boatId)
     .eq("owner_packages.owner_id", session.user.id);
 
+  type ExistingPackageLinkRow = { package_id: string; owner_packages: Pick<OwnerPackageRow, "description"> | null };
+
   const existingCorePackageIds = Array.isArray(existingLinks)
-    ? existingLinks
-        .filter((row: any) => {
+    ? (existingLinks as unknown as ExistingPackageLinkRow[])
+        .filter((row) => {
           const desc = row.owner_packages?.description;
           return typeof desc !== "string" || !desc.includes(BOAT_EXTRA_MARKER);
         })
-        .map((row: any) => row.package_id)
+        .map((row) => row.package_id)
     : [];
 
   if (existingCorePackageIds.length > 0) {
@@ -1139,7 +1148,7 @@ export const saveBoatPackages = async (
   }
 
   const { error: linkError } = await packageBoatsTable.insert(
-    insertedPackages.map((pkg: any) => ({
+    insertedPackages.map((pkg: { id: string }) => ({
       package_id: pkg.id,
       boat_id: boatId,
     })),
@@ -1153,8 +1162,8 @@ export const saveBoatPackages = async (
 
 export const addOwnerPackage = async (pkg: Omit<OwnerPackage, "id">): Promise<OwnerPackage> => {
   const session = await getSession();
-  const packagesTable = (supabase as any).from("owner_packages");
-  const packageBoatsTable = (supabase as any).from("owner_package_boats");
+  const packagesTable = supabase.from("owner_packages");
+  const packageBoatsTable = supabase.from("owner_package_boats");
 
   const { data, error } = await packagesTable
     .insert({
@@ -1185,8 +1194,8 @@ export const addOwnerPackage = async (pkg: Omit<OwnerPackage, "id">): Promise<Ow
 
 export const updateOwnerPackage = async (id: string, updates: Partial<OwnerPackage>): Promise<OwnerPackage | null> => {
   const session = await getSession();
-  const packagesTable = (supabase as any).from("owner_packages");
-  const packageBoatsTable = (supabase as any).from("owner_package_boats");
+  const packagesTable = supabase.from("owner_packages");
+  const packageBoatsTable = supabase.from("owner_package_boats");
 
   const packageUpdates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
@@ -1219,8 +1228,8 @@ export const updateOwnerPackage = async (id: string, updates: Partial<OwnerPacka
 
 export const deleteOwnerPackage = async (id: string): Promise<boolean> => {
   const session = await getSession();
-  await (supabase as any).from("owner_package_boats").delete().eq("package_id", id);
-  const { error } = await (supabase as any).from("owner_packages").delete().eq("id", id).eq("owner_id", session.user.id);
+  await supabase.from("owner_package_boats").delete().eq("package_id", id);
+  const { error } = await supabase.from("owner_packages").delete().eq("id", id).eq("owner_id", session.user.id);
   if (error) {
     throw new Error(error.message || "Failed to delete package");
   }
@@ -1234,7 +1243,7 @@ export const getOwnerCalendarEvents = async (boatId?: string): Promise<OwnerCale
 
   await getSession();
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("calendar_events")
     .select("id, boat_id, title, event_type, description, booking_id, start_time, end_time")
     .eq("boat_id", boatId)
@@ -1245,7 +1254,7 @@ export const getOwnerCalendarEvents = async (boatId?: string): Promise<OwnerCale
   }
 
   const rows = Array.isArray(data) ? data : [];
-  return rows.map((row: any): OwnerCalendarEvent => ({
+  return rows.map((row): OwnerCalendarEvent => ({
     id: row.id,
     boatId: row.boat_id,
     // Derive a local YYYY-MM-DD date string from start_time
@@ -1277,7 +1286,7 @@ export const addCalendarEvent = async (event: Omit<OwnerCalendarEvent, "id">): P
     ? new Date(`${event.date}T${event.endTime}:00`).toISOString()
     : null;
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("calendar_events")
     .insert({
       user_id: session.user.id,
@@ -1317,7 +1326,7 @@ export const deleteCalendarEvent = async (id: string): Promise<boolean> => {
   const session = await getSession();
 
   // Fetch event to enforce that only blocked/maintenance can be deleted here
-  const { data: row, error: fetchError } = await (supabase as any)
+  const { data: row, error: fetchError } = await supabase
     .from("calendar_events")
     .select("id, event_type, user_id")
     .eq("id", id)
@@ -1332,7 +1341,7 @@ export const deleteCalendarEvent = async (id: string): Promise<boolean> => {
     throw new Error("Booked events are managed via bookings. Change or cancel the booking instead.");
   }
 
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("calendar_events")
     .delete()
     .eq("id", id)
@@ -1364,7 +1373,7 @@ export const getOwnerStats = async (): Promise<OwnerStats> => {
 export const getOwnerBookings = async (): Promise<OwnerBooking[]> => {
   const session = await getSession();
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("bookings")
     .select(
       "id, boat_id, boat_name, customer_name, start_date, end_date, departure_time, end_time, guests, status, total_price, boats!inner(owner_id, name)",
@@ -1377,8 +1386,23 @@ export const getOwnerBookings = async (): Promise<OwnerBooking[]> => {
     throw new Error(error.message || "Failed to load owner bookings");
   }
 
-  const rows = Array.isArray(data) ? data : [];
-  return rows.map((row: any): OwnerBooking => ({
+  type OwnerBookingRow = {
+    id: string;
+    boat_id: string;
+    boat_name: string | null;
+    customer_name: string | null;
+    start_date: string;
+    end_date: string | null;
+    departure_time: string | null;
+    end_time: string | null;
+    guests: number | null;
+    status: string;
+    total_price: number | null;
+    boats: { owner_id: string; name: string } | null;
+  };
+
+  const rows = Array.isArray(data) ? (data as unknown as OwnerBookingRow[]) : [];
+  return rows.map((row): OwnerBooking => ({
     id: String(row.id),
     boatName: String(row.boat_name || row.boats?.name || "Boat"),
     customerName: String(row.customer_name || "Guest"),
@@ -1397,7 +1421,7 @@ export const updateOwnerBookingStatus = async (bookingId: string, status: string
     data: { session },
   } = await supabase.auth.getSession();
 
-  const apiBaseUrl = (import.meta as any).env?.VITE_API_BASE_URL?.trim?.() ?? "";
+  const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
   const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
   const url = `${base}/api/owner/bookings/${encodeURIComponent(bookingId)}/status`;
 

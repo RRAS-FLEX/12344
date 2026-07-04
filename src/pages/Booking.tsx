@@ -36,6 +36,11 @@ type BoatPackage = {
 
 type PaymentMethod = "stripe";
 
+// "side" flow: submit a request for manual admin review instead of paying via
+// Stripe. Flip back to "stripe" to re-activate the untouched Stripe checkout
+// path once it's ready to be the main flow again.
+const ACTIVE_BOOKING_FLOW: "stripe" | "request" = "request";
+
 type OwnerPackageJoinRow = {
   package_id: string;
   owner_packages: {
@@ -372,7 +377,7 @@ const Booking = () => {
   const isPartySoldOut = isPartyBooking && ticketMaxPeople > 0 && ticketsRemaining <= 0;
   const canContinueStep1 = isPartyBooking ? !isPartySoldOut : Boolean(selectedDate && availableDepartureTimes.includes(departureTime));
   const canContinueStep2 = Boolean(customerName.trim() && customerEmail.trim());
-  const canContinueStep3 = Boolean(paymentPlan);
+  const canContinueStep3 = ACTIVE_BOOKING_FLOW === "request" ? true : Boolean(paymentPlan);
   // For party bookings, collapse flow into a single step for a simpler UX.
   const bookingStepCount = isPartyBooking ? 1 : 4;
   const finalBookingStep = isPartyBooking ? 1 : 4;
@@ -494,7 +499,7 @@ const Booking = () => {
     return () => {
       cancelled = true;
     };
-  }, [boat?.id, isPartyBooking, bookingsRealtimeTick, partyInventoryDateString]);
+  }, [boat?.id, boat?.name, isPartyBooking, bookingsRealtimeTick, partyInventoryDateString]);
 
   useEffect(() => {
     if (!boat?.id) {
@@ -633,7 +638,7 @@ const Booking = () => {
     return () => {
       cancelled = true;
     };
-  }, [boat?.id, boat?.name, bookingsRealtimeTick, bookingDurationHours, hasDateIntent, isPartyBooking, navigate, partyStartTime, selectedDate, unavailableDates]);
+  }, [boat?.id, boat?.name, bookingsRealtimeTick, bookingDurationHours, hasDateIntent, isPartyBooking, navigate, partyStartTime, selectedDate, unavailableDates, resolvedPartyEventDate, resolvedPartyEventTime]);
 
   useEffect(() => {
     if (!boat?.id || !selectedDate) {
@@ -806,7 +811,7 @@ const Booking = () => {
       return;
     }
 
-    if (!paymentPlan && !isPartyBooking) {
+    if (ACTIVE_BOOKING_FLOW === "stripe" && !paymentPlan && !isPartyBooking) {
       toast({
         title: tl("Select payment plan", "Επίλεξε πλάνο πληρωμής"),
         description: tl("Choose deposit or full payment before confirming.", "Επίλεξε προκαταβολή ή πλήρη πληρωμή πριν την επιβεβαίωση."),
@@ -815,7 +820,59 @@ const Booking = () => {
       return;
     }
 
-    if (paymentMethod === "stripe") {
+    if (ACTIVE_BOOKING_FLOW === "request") {
+      setIsConfirming(true);
+      try {
+        const response = await fetch("/api/booking-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            boatId: boat.id,
+            boatName: boat.name,
+            customerId: sessionUser?.id,
+            customerName: customerName.trim(),
+            customerEmail: customerEmail.trim().toLowerCase(),
+            startDate: bookingDateString,
+            departureTime: effectiveDepartureTime,
+            packageHours: bookingDurationHours,
+            guests: guestCount,
+            packageLabel: isPartyBooking ? "Party tickets" : selectedPackage.name,
+            specialRequests: specialRequests.trim() || undefined,
+            totalPrice: estimatedTotal,
+          }),
+        });
+
+        const raw = await response.text();
+        let payload: { bookingRequestId?: string; error?: string } = {};
+        if (raw) {
+          try {
+            payload = JSON.parse(raw);
+          } catch {
+            throw new Error("Booking request API returned a non-JSON response.");
+          }
+        }
+
+        if (!response.ok) {
+          throw new Error(payload?.error || "Failed to submit booking request");
+        }
+
+        navigate(
+          `/booking-requested?boat=${encodeURIComponent(boat.name)}&date=${encodeURIComponent(bookingDateString)}&departure=${encodeURIComponent(effectiveDepartureTime)}`,
+        );
+        return;
+      } catch (error) {
+        toast({
+          title: tl("Could not submit request", "Δεν ήταν δυνατή η υποβολή αιτήματος"),
+          description: error instanceof Error ? error.message : "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      } finally {
+        setIsConfirming(false);
+      }
+    }
+
+    if (ACTIVE_BOOKING_FLOW === "stripe" && paymentMethod === "stripe") {
       setIsConfirming(true);
       let redirectedToCheckout = false;
       try {
@@ -1781,7 +1838,7 @@ const Booking = () => {
                 </div>
                 ) : null}
 
-                {bookingStep === 3 && !isPartyBooking ? (
+                {bookingStep === 3 && !isPartyBooking && ACTIVE_BOOKING_FLOW === "stripe" ? (
                   <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-semibold text-foreground">{isPartyBooking ? "Sector 5: Ticket payment" : "Sector 5: Payment"}</p>
@@ -1842,6 +1899,27 @@ const Booking = () => {
                             ? `Remaining at harbor (card or cash): €${Math.max(estimatedTotal - depositAmount, 0)}`
                             : "No remaining balance at harbor — full amount is paid online by card."}
                       </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                {bookingStep === 3 && !isPartyBooking && ACTIVE_BOOKING_FLOW === "request" ? (
+                  <div className="rounded-2xl border border-border p-4 bg-muted/10 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-foreground">Sector 5: Review price</p>
+                      <Badge variant="outline">No payment now</Badge>
+                    </div>
+
+                    <div className="rounded-2xl border border-aegean/30 bg-aegean/5 p-3 space-y-1.5">
+                      <p className="text-sm font-medium text-foreground">We'll confirm availability by phone</p>
+                      <p className="text-xs text-muted-foreground">
+                        No payment is taken now. An admin will call the owner to confirm this slot, then email you the booking details.
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-aegean/30 bg-aegean/5 p-3">
+                      <p className="text-xs text-muted-foreground">Estimated total</p>
+                      <p className="text-lg font-semibold text-foreground">€{estimatedTotal}</p>
                     </div>
                   </div>
                 ) : null}
@@ -2013,21 +2091,27 @@ const Booking = () => {
                       </>
                     )}
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Payment method</span>
-                      <span className="text-foreground font-medium">Card via Stripe Checkout</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Payment plan</span>
+                      <span className="text-muted-foreground">Payment</span>
                       <span className="text-foreground font-medium">
-                        {isPartyBooking
-                          ? "Ticket booking"
-                          : paymentPlan === "deposit"
-                            ? "30% deposit"
-                            : paymentPlan === "full"
-                              ? "Pay full now"
-                              : "Select plan"}
+                        {ACTIVE_BOOKING_FLOW === "request"
+                          ? "No payment now — confirmed by admin"
+                          : "Card via Stripe Checkout"}
                       </span>
                     </div>
+                    {ACTIVE_BOOKING_FLOW === "stripe" ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Payment plan</span>
+                        <span className="text-foreground font-medium">
+                          {isPartyBooking
+                            ? "Ticket booking"
+                            : paymentPlan === "deposit"
+                              ? "30% deposit"
+                              : paymentPlan === "full"
+                                ? "Pay full now"
+                                : "Select plan"}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -2039,7 +2123,9 @@ const Booking = () => {
                   {bookingStep === finalBookingStep ? (
                     <Button className="w-full bg-gradient-accent text-accent-foreground gap-2" onClick={handleConfirmBooking} disabled={isConfirming}>
                       {isConfirming ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                      {isConfirming ? "Creating secure checkout..." : `Confirm booking (€${amountDueNow} now)`}
+                      {ACTIVE_BOOKING_FLOW === "request"
+                        ? (isConfirming ? "Submitting request..." : "Request this boat")
+                        : (isConfirming ? "Creating secure checkout..." : `Confirm booking (€${amountDueNow} now)`)}
                     </Button>
                   ) : null}
                   <Button asChild variant="outline" className="w-full">

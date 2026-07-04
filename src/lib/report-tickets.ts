@@ -1,4 +1,4 @@
-﻿import { supabase } from "./supabase";
+﻿import { supabase, type DatabaseTables } from "./supabase";
 
 export type ReportType = "customer" | "owner" | "boat" | "website";
 export type ReportSeverity = "low" | "medium" | "high" | "critical";
@@ -35,7 +35,7 @@ export interface NewReportTicket {
 
 const REPORT_STORAGE_KEY = "nautiplex:report-tickets";
 
-const mapReportTicket = (ticket: any): ReportTicket => ({
+const mapReportTicket = (ticket: DatabaseTables["report_tickets"]["Row"]): ReportTicket => ({
   id: String(ticket.id),
   reportType: ticket.report_type,
   subject: ticket.subject,
@@ -109,7 +109,7 @@ export const listReportTickets = async (options?: {
   const reporterEmail = options?.reporterEmail?.trim().toLowerCase() ?? "";
 
   try {
-    let query = (supabase as any)
+    let query = supabase
       .from("report_tickets")
       .select("*")
       .order("created_at", { ascending: false });
@@ -139,7 +139,7 @@ export const listReportTickets = async (options?: {
 
 export const addReportTicket = async (ticket: NewReportTicket): Promise<ReportTicket> => {
   try {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("report_tickets")
       .insert({
         report_type: ticket.reportType,

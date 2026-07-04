@@ -208,10 +208,10 @@ export const getDestinations = async (): Promise<Destination[]> => {
 
   const fetchOnce = async (): Promise<Destination[]> => {
     const [{ data, error }, { data: boatRows }] = await Promise.all([
-      (supabase as any)
+      supabase
       .from("destinations")
       .select("id, slug, name, images, boats, description, best_for"),
-      (supabase as any)
+      supabase
         .from("boats")
         .select("location, status"),
     ]);
@@ -230,7 +230,7 @@ export const getDestinations = async (): Promise<Destination[]> => {
           .filter(Boolean)
       : [];
 
-    const destinationImagePaths = [...data].map((destination: any) => {
+    const destinationImagePaths = [...data].map((destination) => {
       const rawImages: string = destination.images?.trim() ?? "";
       return rawImages && !/\.\w{2,5}$/.test(rawImages)
         ? `${rawImages}/1.jpg`
@@ -239,8 +239,8 @@ export const getDestinations = async (): Promise<Destination[]> => {
     const signedImageUrls = await fetchSignedDestinationImageUrls(destinationImagePaths);
 
     return [...data]
-      .sort((a: any, b: any) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")))
-      .map((destination: any) => {
+      .sort((a, b) => String(a?.name ?? "").localeCompare(String(b?.name ?? "")))
+      .map((destination) => {
       const fallbackImage = fallbackDestinations.find((item) => item.slug === destination.slug)?.image ?? placeholderDestinationImage;
       const rawImages: string = destination.images?.trim() ?? "";
       const resolvedImagePath = rawImages && !/\.\w{2,5}$/.test(rawImages)

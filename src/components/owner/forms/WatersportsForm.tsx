@@ -175,7 +175,11 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
         imageFile,
       };
 
-      isEdit ? await updateOwnerBoat(boat!.id, boatData) : await addOwnerBoat(boatData);
+      if (isEdit) {
+        await updateOwnerBoat(boat!.id, boatData);
+      } else {
+        await addOwnerBoat(boatData);
+      }
 
       toast({
         title: tl(

@@ -226,9 +226,11 @@ const BoatCard = ({
             ) : null}
           </div>
           {id ? (
-            <Link to={buildBoatDetailsPath({ id, name, location })} className="text-sm font-medium text-aegean hover:text-turquoise transition-colors">
+            // The whole card is already wrapped in a <Link> below (same destination);
+            // a nested <Link> here would render an invalid <a> inside <a>.
+            <span className="text-sm font-medium text-aegean hover:text-turquoise transition-colors">
               View Boat →
-            </Link>
+            </span>
           ) : (
             <button className="text-sm font-medium text-aegean hover:text-turquoise transition-colors">
               View Boat →

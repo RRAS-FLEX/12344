@@ -118,7 +118,7 @@ export const addBoatReview = async (input: ReviewDraftInput): Promise<BoatReview
     data: { session },
   } = await supabase.auth.getSession();
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("reviews")
     .insert({
       booking_id: input.bookingId,

@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
@@ -7,7 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import PDFDocument from "pdfkit";
 import { resolveFlashSalePricing } from "./flash-sale-pricing.mjs";
-import { resolveBoatVoucherPricing } from "./booking-pricing.mjs";
+import { resolveBoatVoucherPricing, calculateRefundTier } from "./booking-pricing.mjs";
 
 dotenv.config({ path: ".env" });
 dotenv.config({ path: ".env.local", override: true });
@@ -439,6 +440,26 @@ const requireOwnerRole = async (req, res, next) => {
   }
 
   req.ownerProfile = profile;
+  return next();
+};
+
+const requireAdminRole = async (req, res, next) => {
+  const user = req.supabaseUser;
+  if (!user) {
+    return res.status(500).json({ error: "Supabase user context is missing" });
+  }
+
+  const { data: adminRow, error } = await supabaseAdmin
+    .from("admin_users")
+    .select("id, user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error || !adminRow) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+
+  req.adminRow = adminRow;
   return next();
 };
 
@@ -2181,13 +2202,12 @@ app.post("/api/bookings/cancel", requireSupabaseUser, requireBookingOwnerAccess,
   if (booking.stripe_payment_intent_id && hasValidStripeConfig) {
     const tripDate = booking.start_date ? new Date(`${booking.start_date}T00:00:00.000Z`) : null;
     const hoursUntilTrip = tripDate ? (tripDate.getTime() - Date.now()) / (1000 * 60 * 60) : null;
-    refundRatePercent = hoursUntilTrip !== null && Number.isFinite(hoursUntilTrip) && hoursUntilTrip >= 48 ? 100 : 50;
 
     try {
       const paymentIntent = await stripe.paymentIntents.retrieve(booking.stripe_payment_intent_id);
       const fallbackAmount = Math.round(Number(booking.amount_due_now ?? booking.total_price ?? 0) * 100);
       const amountPaid = Number(paymentIntent.amount_received ?? 0) > 0 ? Number(paymentIntent.amount_received) : fallbackAmount;
-      refundAmountCents = Math.max(0, Math.round(amountPaid * (refundRatePercent / 100)));
+      ({ refundRatePercent, refundAmountCents } = calculateRefundTier({ hoursUntilTrip, amountPaidCents: amountPaid }));
 
       if (refundAmountCents > 0) {
         const refund = await stripe.refunds.create({
@@ -2706,6 +2726,259 @@ app.post("/api/boats/migrate/:boatId", requireSupabaseUser, requireOwnerRole, as
   }
 });
 
-app.listen(port, () => {
-  console.log(`Stripe API running on http://localhost:${port}`);
+// --- "Side" manual booking-request flow ---------------------------------
+// Deliberately separate from the Stripe checkout/webhook/refund routes above:
+// no payment, no interaction with the bookings table's Stripe-related triggers.
+// A client submits a request; an admin (using a separate Flutter app) phones
+// the owner outside this system, then accepts or rejects via the routes below.
+
+const bookingRequestSchema = z.object({
+  boatId: z.string().min(1),
+  boatName: z.string().min(1),
+  customerId: z.string().uuid().optional(),
+  customerName: z.string().min(1),
+  customerEmail: z.string().email(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  departureTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  packageHours: z.number().min(0).max(24).optional(),
+  guests: z.number().min(1).max(100).optional(),
+  packageLabel: z.string().optional(),
+  specialRequests: z.string().optional(),
+  totalPrice: z.number().min(0).optional(),
 });
+
+app.post("/api/booking-requests", async (req, res) => {
+  if (!hasValidSupabaseAdminConfig) {
+    return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+  }
+
+  const parsed = bookingRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+  }
+
+  const data = parsed.data;
+
+  const { data: boat, error: boatError } = await supabaseAdmin
+    .from("boats")
+    .select("id, name, owner_id")
+    .eq("id", data.boatId)
+    .maybeSingle();
+
+  if (boatError || !boat) {
+    return res.status(404).json({ error: "Boat not found" });
+  }
+
+  const { data: owner } = await supabaseAdmin
+    .from("users")
+    .select("id, name, phone")
+    .eq("id", boat.owner_id)
+    .maybeSingle();
+
+  // Basic conflict check across both the Stripe-confirmed bookings table and
+  // already-accepted side-path requests, so the two systems don't obviously
+  // double-book the same boat/date/time while both exist.
+  const [{ data: existingBookings }, { data: existingRequests }] = await Promise.all([
+    supabaseAdmin
+      .from("bookings")
+      .select("departure_time, status")
+      .eq("boat_id", data.boatId)
+      .eq("start_date", data.startDate)
+      .in("status", ["pending", "confirmed"]),
+    supabaseAdmin
+      .from("booking_requests")
+      .select("departure_time, status")
+      .eq("boat_id", data.boatId)
+      .eq("start_date", data.startDate)
+      .in("status", ["pending", "accepted"]),
+  ]);
+
+  const isTaken = [...(existingBookings ?? []), ...(existingRequests ?? [])].some(
+    (row) => row.departure_time === data.departureTime,
+  );
+  if (isTaken) {
+    return res.status(409).json({ error: "This time slot is already requested or booked." });
+  }
+
+  const { data: created, error: insertError } = await supabaseAdmin
+    .from("booking_requests")
+    .insert({
+      boat_id: boat.id,
+      boat_name: boat.name || data.boatName,
+      owner_id: boat.owner_id,
+      owner_name: owner?.name ?? null,
+      customer_id: data.customerId ?? null,
+      customer_name: data.customerName,
+      customer_email: data.customerEmail.trim().toLowerCase(),
+      start_date: data.startDate,
+      departure_time: data.departureTime,
+      end_time: data.endTime ?? null,
+      package_hours: data.packageHours ?? null,
+      guests: data.guests ?? 1,
+      package_label: data.packageLabel ?? null,
+      special_requests: data.specialRequests ?? null,
+      total_price: data.totalPrice ?? 0,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !created) {
+    return res.status(500).json({ error: insertError?.message || "Failed to create booking request" });
+  }
+
+  const adminAlertEmail = process.env.ADMIN_ALERT_EMAIL;
+  if (adminAlertEmail && resend && hasValidResendConfig) {
+    try {
+      await resend.emails.send({
+        from: resendFromAddress,
+        to: testEmailRecipient || adminAlertEmail,
+        subject: `New booking request: ${boat.name}`,
+        text: `${data.customerName} (${data.customerEmail}) requested ${boat.name} on ${data.startDate} at ${data.departureTime}. Owner: ${owner?.name ?? "unknown"} (${owner?.phone ?? "no phone on file"}). Request id: ${created.id}`,
+      });
+    } catch (error) {
+      console.error("Failed to send admin alert email for booking request", error);
+    }
+  }
+
+  return res.json({ ok: true, bookingRequestId: created.id });
+});
+
+app.get("/api/admin/booking-requests", requireSupabaseUser, requireAdminRole, async (req, res) => {
+  const status = typeof req.query?.status === "string" ? req.query.status : null;
+
+  let query = supabaseAdmin
+    .from("booking_requests")
+    .select("*, owner:users(phone)")
+    .order("created_at", { ascending: false });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return res.status(500).json({ error: error.message || "Failed to load booking requests" });
+  }
+
+  return res.json({ bookingRequests: data ?? [] });
+});
+
+app.post("/api/admin/booking-requests/:id/accept", requireSupabaseUser, requireAdminRole, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: bookingRequest, error: fetchError } = await supabaseAdmin
+    .from("booking_requests")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchError || !bookingRequest) {
+    return res.status(404).json({ error: "Booking request not found" });
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("booking_requests")
+    .update({
+      status: "accepted",
+      reviewed_by: req.supabaseUser.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message || "Failed to accept booking request" });
+  }
+
+  if (resend && hasValidResendConfig) {
+    try {
+      await resend.emails.send({
+        from: resendFromAddress,
+        to: testEmailRecipient || bookingRequest.customer_email,
+        subject: `Your booking is confirmed: ${bookingRequest.boat_name}`,
+        text: `Good news — your booking for ${bookingRequest.boat_name} on ${bookingRequest.start_date} at ${bookingRequest.departure_time} is confirmed. We'll be in touch with any further details.`,
+      });
+    } catch (error) {
+      console.error("Failed to send booking-accepted email", error);
+    }
+  }
+
+  return res.json({ ok: true, status: "accepted" });
+});
+
+app.post("/api/admin/booking-requests/:id/reject", requireSupabaseUser, requireAdminRole, async (req, res) => {
+  const { id } = req.params;
+  const adminNotes = typeof req.body?.adminNotes === "string" ? req.body.adminNotes.trim() : null;
+
+  const { error: updateError } = await supabaseAdmin
+    .from("booking_requests")
+    .update({
+      status: "rejected",
+      admin_notes: adminNotes,
+      reviewed_by: req.supabaseUser.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message || "Failed to reject booking request" });
+  }
+
+  return res.json({ ok: true, status: "rejected" });
+});
+
+app.patch("/api/admin/booking-requests/:id/reassign", requireSupabaseUser, requireAdminRole, async (req, res) => {
+  const { id } = req.params;
+  const newBoatId = typeof req.body?.boatId === "string" ? req.body.boatId.trim() : "";
+
+  if (!newBoatId) {
+    return res.status(400).json({ error: "Missing boatId" });
+  }
+
+  const { data: boat, error: boatError } = await supabaseAdmin
+    .from("boats")
+    .select("id, name, owner_id")
+    .eq("id", newBoatId)
+    .maybeSingle();
+
+  if (boatError || !boat) {
+    return res.status(404).json({ error: "Boat not found" });
+  }
+
+  const { data: owner } = await supabaseAdmin
+    .from("users")
+    .select("name")
+    .eq("id", boat.owner_id)
+    .maybeSingle();
+
+  const { error: updateError } = await supabaseAdmin
+    .from("booking_requests")
+    .update({
+      boat_id: boat.id,
+      boat_name: boat.name,
+      owner_id: boat.owner_id,
+      owner_name: owner?.name ?? null,
+      status: "pending",
+      admin_notes: null,
+      reviewed_by: null,
+      reviewed_at: null,
+    })
+    .eq("id", id);
+
+  if (updateError) {
+    return res.status(500).json({ error: updateError.message || "Failed to reassign booking request" });
+  }
+
+  return res.json({ ok: true });
+});
+
+const isDirectlyExecuted = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+
+if (isDirectlyExecuted) {
+  app.listen(port, () => {
+    console.log(`Stripe API running on http://localhost:${port}`);
+  });
+}
+
+export default app;

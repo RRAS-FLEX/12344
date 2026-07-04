@@ -100,19 +100,19 @@ const parseFeed = (icsText: string) => {
 
   return events
     .map((event, index) => {
-      const startField = (event as any).DTSTART;
+      const startField = event.DTSTART;
       if (!startField?.value) return null;
 
       const start = parseIcsDate(startField.value, startField.params);
-      const endField = (event as any).DTEND;
+      const endField = event.DTEND;
       const end = endField?.value ? parseIcsDate(endField.value, endField.params) : null;
-      const uid = String((event as any).UID?.value || `ical-${index}-${start.date.toISOString()}`);
+      const uid = String(event.UID?.value || `ical-${index}-${start.date.toISOString()}`);
 
       return {
         uid,
-        title: String((event as any).SUMMARY?.value || "Blocked time"),
-        description: String((event as any).DESCRIPTION?.value || "Imported from external iCal feed"),
-        location: String((event as any).LOCATION?.value || ""),
+        title: String(event.SUMMARY?.value || "Blocked time"),
+        description: String(event.DESCRIPTION?.value || "Imported from external iCal feed"),
+        location: String(event.LOCATION?.value || ""),
         startTime: start.date.toISOString(),
         endTime: (end?.date ?? new Date(start.date.getTime() + 60 * 60 * 1000)).toISOString(),
         allDay: start.allDay,

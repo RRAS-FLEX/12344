@@ -185,6 +185,32 @@ export const BoatMapListSkeleton = ({ count = 5 }: { count?: number }) => (
   </div>
 );
 
+export const NewsArticleSkeleton = () => (
+  <div className="min-h-screen bg-background">
+    <main className="pt-16 pb-20">
+      <section className="py-8 md:py-10 border-b border-border">
+        <div className="container mx-auto px-4 max-w-3xl space-y-3">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-9 w-full max-w-xl" />
+          <Skeleton className="h-4 w-40" />
+        </div>
+      </section>
+      <section className="py-10 md:py-12">
+        <div className="container mx-auto px-4 max-w-3xl space-y-6">
+          <Skeleton className="aspect-[16/9] w-full rounded-2xl" />
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-11/12" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+);
+
 export const OwnerFleetPageSkeleton = () => (
   <div className="min-h-screen bg-background">
     <main className="pt-16">

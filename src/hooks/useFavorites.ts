@@ -47,7 +47,7 @@ const fetchRemoteFavorites = async (userId: string): Promise<Set<string>> => {
   }
 
   const request = (async () => {
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("favorites")
       .select("boat_id")
       .eq("user_id", userId);
@@ -99,7 +99,7 @@ export const useFavorites = () => {
       const mergedFavorites = new Set<string>([...localFavorites, ...remoteFavorites]);
 
       if (mergedFavorites.size > remoteFavorites.size) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("favorites")
           .upsert(
             [...mergedFavorites].map((boatId) => ({ user_id: user.id, boat_id: boatId })),
@@ -133,7 +133,7 @@ export const useFavorites = () => {
   const persistFavoriteChange = useCallback(
     async (userId: string, boatId: string, shouldFavorite: boolean) => {
       if (shouldFavorite) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("favorites")
           .upsert({ user_id: userId, boat_id: boatId }, { onConflict: "user_id,boat_id" });
 
@@ -147,7 +147,7 @@ export const useFavorites = () => {
         return;
       }
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("favorites")
         .delete()
         .eq("user_id", userId)

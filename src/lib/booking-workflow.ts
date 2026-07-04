@@ -565,7 +565,9 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
       next.setUTCDate(next.getUTCDate() + 1);
       bookingEndDate = next.toISOString().slice(0, 10);
     }
-  } catch {}
+  } catch {
+    // Keep bookingEndDate as input.date if time parsing fails.
+  }
 
   const { data: bookingRowRaw, error: bookingError } = await supabase
     .from("bookings")

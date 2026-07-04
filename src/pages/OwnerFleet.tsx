@@ -74,6 +74,11 @@ const OwnerFleet = () => {
     }
   }, [fleet]);
 
+  const aggregateRating = useMemo(() => (
+    fleet.reduce((sum, boat) => sum + (reviewStatsMap[boat.id]?.averageRating ?? 0), 0) /
+    Math.max(fleet.length, 1)
+  ).toFixed(1), [fleet, reviewStatsMap]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -115,11 +120,6 @@ const OwnerFleet = () => {
       </div>
     );
   }
-
-  const aggregateRating = useMemo(() => (
-    fleet.reduce((sum, boat) => sum + (reviewStatsMap[boat.id]?.averageRating ?? 0), 0) /
-    Math.max(fleet.length, 1)
-  ).toFixed(1), [fleet, reviewStatsMap]);
 
   return (
     <div className="min-h-screen bg-background">

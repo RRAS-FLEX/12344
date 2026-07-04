@@ -116,7 +116,7 @@ const ensureUserProfile = async (user: User, fallbackName?: string): Promise<Dat
     throw new Error("Supabase user is missing an email address");
   }
 
-  const usersTable = supabase.from("users") as any;
+  const usersTable = supabase.from("users");
 
   const { data, error } = await usersTable.upsert(
       {
@@ -207,7 +207,7 @@ export const signInWithEmail = async (
   password: string,
   options?: { rememberMe?: boolean }
 ): Promise<AuthUser> => {
-  const usersTable = supabase.from("users") as any;
+  const usersTable = supabase.from("users");
   const rememberMe = Boolean(options?.rememberMe);
 
   setRememberMePreference(rememberMe);
@@ -268,7 +268,7 @@ export const signInWithEmail = async (
  * Get the currently signed-in user (from Supabase session)
  */
 export const getSessionUser = async (): Promise<AuthUser | null> => {
-  const usersTable = supabase.from("users") as any;
+  const usersTable = supabase.from("users");
 
   const {
     data: { session },

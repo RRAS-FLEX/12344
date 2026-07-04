@@ -104,6 +104,9 @@ const Navbar = () => {
       cancelled = true;
       window.clearInterval(refreshId);
     };
+    // Depend on stable primitive fields instead of the authUser object reference,
+    // which changes identity on every render and would restart the poll interval.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser?.id, authUser?.email, authUser?.isOwner]);
 
   const unreadCount = notifications.filter((item) => !item.isRead).length;
@@ -235,6 +238,9 @@ const Navbar = () => {
             </Link>
             <Link to="/destinations" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               {t("nav.destinations")}
+            </Link>
+            <Link to="/news" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              {t("nav.news")}
             </Link>
             <Link to="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               {t("nav.about")}
@@ -522,6 +528,7 @@ const Navbar = () => {
                   <Link to="/boats" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>{t("nav.boats")}</Link>
                   <Link to="/boats-map" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>{tl("Map", "Χάρτης")}</Link>
                   <Link to="/destinations" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>{t("nav.destinations")}</Link>
+                  <Link to="/news" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>{t("nav.news")}</Link>
                   <Link to="/about" className="text-sm text-muted-foreground py-2" onClick={() => setMobileOpen(false)}>{t("nav.about")}</Link>
                 </>
               </div>

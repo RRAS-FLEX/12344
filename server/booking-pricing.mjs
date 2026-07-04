@@ -47,3 +47,14 @@ export const resolveBoatVoucherPricing = ({
     amountDueNow,
   };
 };
+
+// Cancellation refund tiers: full refund 48+ hours before the trip, half refund otherwise.
+export const calculateRefundTier = ({ hoursUntilTrip, amountPaidCents }) => {
+  const refundRatePercent =
+    hoursUntilTrip !== null && hoursUntilTrip !== undefined && Number.isFinite(hoursUntilTrip) && hoursUntilTrip >= 48
+      ? 100
+      : 50;
+  const refundAmountCents = Math.max(0, Math.round(Number(amountPaidCents ?? 0) * (refundRatePercent / 100)));
+
+  return { refundRatePercent, refundAmountCents };
+};

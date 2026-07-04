@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, type DatabaseTables } from "@/lib/supabase";
 
 export interface OwnerApplicationInput {
   // Personal
@@ -44,7 +44,12 @@ const getSignedInSession = async () => {
   return session;
 };
 
-const mapApplication = (row: any): OwnerApplicationRecord => ({
+type OwnerApplicationSelectedRow = Pick<
+  DatabaseTables["owner_applications"]["Row"],
+  "id" | "status" | "submitted_at" | "owner_name" | "owner_email" | "notes"
+>;
+
+const mapApplication = (row: OwnerApplicationSelectedRow): OwnerApplicationRecord => ({
   id: row.id,
   status: row.status,
   submittedAt: row.submitted_at,
@@ -56,7 +61,7 @@ const mapApplication = (row: any): OwnerApplicationRecord => ({
 export const getMyOwnerApplication = async (): Promise<OwnerApplicationRecord | null> => {
   const session = await getSignedInSession();
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("owner_applications")
     .select("id, status, submitted_at, owner_name, owner_email, notes")
     .eq("type", "owner_verification")
@@ -75,7 +80,7 @@ export const getMyOwnerApplication = async (): Promise<OwnerApplicationRecord | 
 export const submitOwnerApplication = async (input: OwnerApplicationInput): Promise<OwnerApplicationRecord> => {
   const session = await getSignedInSession();
 
-  const { data: profile, error: profileError } = await (supabase as any)
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("id, name, email, is_owner, owner_title, owner_bio")
     .eq("id", session.user.id)
@@ -124,7 +129,7 @@ export const submitOwnerApplication = async (input: OwnerApplicationInput): Prom
     const nextBio = !hasExistingBio && bioLines.length > 0 ? bioLines.join("\n") : null;
 
     if (nextTitle || nextBio) {
-      await (supabase as any)
+      await supabase
         .from("users")
         .update({
           ...(nextTitle ? { owner_title: nextTitle } : {}),
@@ -156,7 +161,7 @@ export const submitOwnerApplication = async (input: OwnerApplicationInput): Prom
     .filter(Boolean)
     .join("\n");
 
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("owner_applications")
     .insert({
       type: "owner_verification",

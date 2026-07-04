@@ -86,7 +86,7 @@ export const getInAppNotifications = async (authUser: AuthUser): Promise<InAppNo
 
   const readIds = readReadNotificationIds(authUser.id);
 
-  const customerBookingsPromise = (supabase as any)
+  const customerBookingsPromise = supabase
     .from("bookings")
     .select("id, boat_name, start_date, departure_time, status, payment_plan, total_price, amount_due_now, created_at")
     .eq("customer_id", authUser.id)
@@ -94,7 +94,7 @@ export const getInAppNotifications = async (authUser: AuthUser): Promise<InAppNo
     .limit(20);
 
   const ownerNotificationsPromise = authUser.isOwner && authUser.email
-    ? (supabase as any)
+    ? supabase
         .from("owner_notifications")
         .select("id, booking_id, subject, message, status, created_at")
         .eq("owner_email", authUser.email)
@@ -108,7 +108,7 @@ export const getInAppNotifications = async (authUser: AuthUser): Promise<InAppNo
   ]);
 
   const customerNotifications = Array.isArray(customerBookingsResult.data)
-    ? customerBookingsResult.data.map((booking: any) => {
+    ? customerBookingsResult.data.map((booking) => {
         const status = String(booking.status ?? "confirmed").toLowerCase();
         const boatName = booking.boat_name ?? "Boat";
         const dateTimeLabel = formatTripDateTime(booking.start_date, booking.departure_time);
@@ -153,7 +153,7 @@ export const getInAppNotifications = async (authUser: AuthUser): Promise<InAppNo
     : [];
 
   const ownerNotifications = Array.isArray(ownerNotificationsResult.data)
-    ? ownerNotificationsResult.data.map((notification: any) => {
+    ? ownerNotificationsResult.data.map((notification) => {
         const status = String(notification.status ?? "queued").toLowerCase();
         const isAlert = status === "failed" || status === "error";
         return {

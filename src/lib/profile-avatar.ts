@@ -3,8 +3,9 @@ import { supabase } from "@/lib/supabase";
 const AVATAR_BUCKET = "profile-images";
 const AVATAR_OBJECT_NAME = "avatar";
 
-const toReadableStorageError = (error: any, fallback: string) => {
-  const message = String(error?.message ?? fallback);
+const toReadableStorageError = (error: unknown, fallback: string) => {
+  const errorLike = error as { message?: string } | null | undefined;
+  const message = String(errorLike?.message ?? fallback);
   const normalized = message.toLowerCase();
 
   if (normalized.includes("bucket") && normalized.includes("not")) {

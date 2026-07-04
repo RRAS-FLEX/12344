@@ -90,6 +90,9 @@ const BoatDetails = () => {
     return () => {
       cancelled = true;
     };
+    // Reload only when the boat reference changes; searchParams/user.isOwner are read
+    // once to decide the fetch path, not meant to re-trigger a reload on their own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boatRef]);
 
   const unavailableDates = boat?.availability.unavailableDates.map((date) => parseISO(date)) ?? [];

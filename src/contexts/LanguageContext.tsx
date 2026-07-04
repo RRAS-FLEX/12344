@@ -11,6 +11,7 @@ const translations: TranslationMap = {
     "nav.home": "Home",
     "nav.boats": "Boats",
     "nav.destinations": "Destinations",
+    "nav.news": "News",
     "nav.about": "About",
     "nav.favorites": "Favorites",
     "nav.signIn": "Login",
@@ -84,6 +85,7 @@ const translations: TranslationMap = {
     "nav.home": "Αρχική",
     "nav.boats": "Σκάφη",
     "nav.destinations": "Προορισμοί",
+    "nav.news": "Νέα",
     "nav.about": "Σχετικά",
     "nav.favorites": "Αγαπημένα",
     "nav.signIn": "Σύνδεση",
@@ -191,4 +193,7 @@ export const LanguageProvider = ({ children }: { children: ReactNode }) => {
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 };
 
+// Co-locating the hook with its Provider is intentional; splitting it out would only
+// churn imports across many consumers for a dev-only Fast Refresh optimization.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useLanguage = () => useContext(LanguageContext);

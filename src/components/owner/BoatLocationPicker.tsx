@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Anchor, Navigation, MapPin } from "lucide-react";
 import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
-import { supabase } from "@/lib/supabase";
+import { supabase, type DatabaseTables } from "@/lib/supabase";
 import type { MapCoordinates, ReverseGeocodeResult } from "@/lib/map-locations";
 import { getDefaultMapCoordinates, reverseGeocodeCoordinates, resolveMapCoordinates } from "@/lib/map-locations";
 import { Input } from "@/components/ui/input";
@@ -20,8 +20,14 @@ interface BoatLocationPickerProps {
   onChange: (next: BoatLocationPickerValue) => void;
 }
 
+// react-leaflet v4's prop types don't line up with this file's v3-style usage
+// (whenCreated, raw coordinate arrays); casting the components themselves is the
+// narrow, contained way to bridge that without touching the working map behavior.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const LeafletMap = MapContainer as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const LeafletTileLayer = TileLayer as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const LeafletMarker = Marker as any;
 
 const createMarkerIcon = () =>
@@ -69,11 +75,11 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
 
       if (!cancelled && !error && Array.isArray(data)) {
         setSavedLocations(
-          data.map((row: any) => ({
-            id: row.id as string,
-            name: row.name as string,
-            location: row.location as string,
-            mapQuery: row.map_query as string,
+          data.map((row) => ({
+            id: row.id,
+            name: row.name,
+            location: row.location,
+            mapQuery: row.map_query,
           })),
         );
       }
@@ -132,7 +138,7 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
     return () => {
       cancelled = true;
     };
-  }, [coords, value.departureMarina, value.location, value.mapQuery, savedLocations.length, onChange]);
+  }, [coords, value.departureMarina, value.location, value.mapQuery, savedLocations, onChange]);
 
   const filteredMarinas = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -194,19 +200,19 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
 
     setIsSaving(true);
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("boat_locations")
         .insert({ name, location: area, map_query: query })
         .select()
         .single();
 
-      const row: any = data;
+      const row = data as DatabaseTables["boat_locations"]["Row"] | null;
       if (!error && row) {
         const created: SavedLocationRow = {
-          id: row.id as string,
-          name: row.name as string,
-          location: row.location as string,
-          mapQuery: row.map_query as string,
+          id: row.id,
+          name: row.name,
+          location: row.location,
+          mapQuery: row.map_query,
         };
         setSavedLocations((current) => [...current, created]);
       }
@@ -235,7 +241,7 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
               scrollWheelZoom
               className="h-52 w-full"
               preferCanvas
-              whenCreated={(map: any) => {
+              whenCreated={(map: L.Map) => {
                 setTimeout(() => map.invalidateSize(), 0);
               }}
             >
@@ -249,13 +255,13 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
                 icon={createMarkerIcon()}
                 draggable
                 eventHandlers={{
-                  dragend: (event: any) => {
-                    const marker = event.target;
+                  dragend: (event: L.LeafletEvent) => {
+                    const marker = event.target as L.Marker;
                     const position = marker.getLatLng();
                     handleMapClick({ lat: position.lat, lng: position.lng });
                   },
-                  click: (event: any) => {
-                    const position = event.latlng ?? event.target.getLatLng();
+                  click: (event: L.LeafletMouseEvent) => {
+                    const position = event.latlng ?? (event.target as L.Marker).getLatLng();
                     handleMapClick({ lat: position.lat, lng: position.lng });
                   },
                 }}
@@ -264,8 +270,8 @@ const BoatLocationPicker = ({ value, onChange }: BoatLocationPickerProps) => {
                 center={[coords.lat, coords.lng]}
                 zoom={13}
                 style={{ display: "none" }}
-                whenCreated={(map: any) => {
-                  map.on("click", (event: any) => {
+                whenCreated={(map: L.Map) => {
+                  map.on("click", (event: L.LeafletMouseEvent) => {
                     const position = event.latlng;
                     handleMapClick({ lat: position.lat, lng: position.lng });
                   });
