@@ -13,11 +13,6 @@ import { resolveBoatVoucherPricing, calculateRefundTier } from "./booking-pricin
 dotenv.config({ path: ".env" });
 dotenv.config({ path: ".env.local", override: true });
 
-const requiredEnv = [
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
-];
-
 const hasPlaceholderValue = (value) => {
   const normalized = String(value ?? "").trim().toLowerCase();
   return (
@@ -31,15 +26,9 @@ const hasPlaceholderValue = (value) => {
   );
 };
 
-for (const key of requiredEnv) {
+for (const key of ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY"]) {
   if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-}
-
-for (const key of ["STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY"]) {
-  if (!process.env[key]) {
-    console.warn(`Missing optional environment variable: ${key}. Stripe endpoints will be unavailable until configured.`);
+    console.warn(`Missing environment variable: ${key}. Routes that depend on it will return a 500 with a config error instead of crashing the whole API.`);
   }
 }
 
@@ -99,12 +88,19 @@ const contactInboxAddress =
     ? process.env.CONTACT_INBOX.trim()
     : (process.env.RESEND_TEST_EMAIL || "info@nautiplex.com");
 
-const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
-});
+// createClient() throws synchronously if the URL/key are empty, which would
+// otherwise crash this module for every route (including ones like
+// /api/health and /api/stripe/config that don't touch Supabase at all).
+// Routes that need it already check hasValidSupabaseAdminConfig and return
+// getSupabaseConfigErrorMessage() themselves.
+const supabaseAdmin = hasValidSupabaseAdminConfig
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
+  : null;
 
 const TIME_REGEX = /^([01]\d|2[0-3]):[0-5]\d$/;
 
