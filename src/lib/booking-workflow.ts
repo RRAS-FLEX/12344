@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { resolveBoatVoucherPricing } from "./booking-pricing";
+import { fetchBoatBlockedSlots } from "./api-endpoints";
 
 export type BookingPaymentMethod = "stripe" | "manual";
 
@@ -112,11 +113,6 @@ type DayBookingRow = {
   package_hours?: number | null;
 };
 
-type DayCalendarEventRow = {
-  start_time?: string | null;
-  end_time?: string | null;
-  all_day?: boolean | null;
-};
 
 type ConfirmedBookingRow = {
   id?: string | null;
@@ -280,6 +276,40 @@ const isoToTimeString = (value: string | null | undefined): string | null => {
   return `${hours}:${minutes}`;
 };
 
+const minutesToTime = (totalMinutes: number) => {
+  const hours = String(Math.floor(totalMinutes / 60)).padStart(2, "0");
+  const minutes = String(totalMinutes % 60).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
+// Owner-set blocked/maintenance calendar entries, read through a sanitized
+// public endpoint since calendar_events itself is RLS-restricted to the
+// owning user. See CLAUDE.md: availability must have one source of truth.
+const loadDayBlockedCalendarSlots = async (boatId: string, date: string): Promise<DayBookingSlot[]> => {
+  let blocks: Awaited<ReturnType<typeof fetchBoatBlockedSlots>> = [];
+  try {
+    blocks = await fetchBoatBlockedSlots(boatId, { from: date, to: date });
+  } catch {
+    return [];
+  }
+
+  return blocks
+    .map((block) => {
+      if (block.allDay) {
+        return { departureTime: minutesToTime(OPERATING_START_MINUTES), endTime: minutesToTime(OPERATING_END_MINUTES) } satisfies DayBookingSlot;
+      }
+
+      const departureTime = isoToTimeString(block.startTime);
+      const endTime = isoToTimeString(block.endTime) ?? minutesToTime(OPERATING_END_MINUTES);
+      if (!departureTime || !isValidTime(departureTime) || !isValidTime(endTime)) {
+        return null;
+      }
+
+      return { departureTime, endTime } satisfies DayBookingSlot;
+    })
+    .filter((slot: DayBookingSlot | null): slot is DayBookingSlot => Boolean(slot));
+};
+
 const loadDayBookedSlots = async (boatId: string, date: string): Promise<DayBookingSlot[]> => {
   // Confirmed bookings for this day
   const { data: bookingRows, error: bookingsError } = await supabase
@@ -306,7 +336,9 @@ const loadDayBookedSlots = async (boatId: string, date: string): Promise<DayBook
           .filter((slot: DayBookingSlot | null): slot is DayBookingSlot => Boolean(slot))
       : [];
 
-  return slotsFromBookings;
+  const slotsFromCalendarBlocks = await loadDayBlockedCalendarSlots(boatId, date);
+
+  return [...slotsFromBookings, ...slotsFromCalendarBlocks];
 };
 
 export const hasAnyDayOccupancy = async (boatId: string, date: string): Promise<boolean> => {

@@ -322,16 +322,27 @@ const Booking = () => {
     .reduce((total, item) => total + item.price, 0);
   const crazySeaRoutingFee = isPartyBooking ? 0 : (selectedPackage.hours >= 8 ? 95 : 0);
   const suggestedFuelLitres = Math.min(120, bookingDurationHours * 8 + Math.max(guestCount - 4, 0) * 2);
+  const ownerUnavailableDates = useMemo(() => {
+    const rawDates = boat?.availability?.unavailableDates;
+    if (!Array.isArray(rawDates) || rawDates.length === 0) return [] as Date[];
+    return rawDates
+      .map((value) => {
+        const parsed = new Date(`${value}T00:00:00`);
+        return Number.isNaN(parsed.getTime()) ? null : startOfDay(parsed);
+      })
+      .filter((date): date is Date => date !== null);
+  }, [boat?.availability?.unavailableDates]);
   const unavailableDates = useMemo(() => {
-    if (autoUnavailableDates.length === 0) return autoUnavailableDates;
+    const combined = [...ownerUnavailableDates, ...autoUnavailableDates];
+    if (combined.length === 0) return combined;
     const seen = new Set<number>();
-    return autoUnavailableDates.filter((date) => {
+    return combined.filter((date) => {
       const key = startOfDay(date).getTime();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [autoUnavailableDates]);
+  }, [ownerUnavailableDates, autoUnavailableDates]);
   const nextAvailableDate = useMemo(() => {
     return Array.from({ length: 21 }, (_, index) => addDays(startOfDay(new Date()), index)).find(
       (date) => !unavailableDates.some((blockedDate) => isSameDay(blockedDate, date)),

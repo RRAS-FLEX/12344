@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UploadCloud, X, Loader2 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
@@ -18,6 +18,7 @@ import {
   updateOwnerBoat,
   OwnerBoat,
 } from "../../../lib/owner-dashboard";
+import { getBoatLocations, formatBoatLocationLabel, type BoatLocation } from "@/lib/boat-locations";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -35,8 +36,10 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
   const { toast } = useToast();
   const isEdit = Boolean(boat);
   const [currentStep, setCurrentStep] = useState(1);
+  const [locationOptions, setLocationOptions] = useState<BoatLocation[]>([]);
 
   const [formData, setFormData] = useState({
+    locationId: boat?.locationId ?? "",
     name: boat?.name ?? "",
     type: boat?.type ?? "Jet Ski",
     location: boat?.location ?? "Thassos",
@@ -59,6 +62,36 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
   const [localImagePreview, setLocalImagePreview] = useState<string>("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLocations = async () => {
+      const options = await getBoatLocations();
+      if (cancelled) return;
+      setLocationOptions(options);
+
+      if (!formData.locationId && options.length > 0) {
+        const first = options[0];
+        setFormData((current) => ({
+          ...current,
+          locationId: first.id,
+          location: first.location,
+          departureMarina: first.name,
+          mapQuery: first.mapQuery || formatBoatLocationLabel(first),
+        }));
+      }
+    };
+
+    void loadLocations();
+
+    return () => {
+      cancelled = true;
+    };
+    // Load location options once on mount; formData.locationId is only read here
+    // to avoid overwriting an existing selection, not to re-trigger the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const compressImageFile = async (file: File): Promise<File> => {
     try {
@@ -155,6 +188,7 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
       const pricePerDay = formData.pricePerHour * 8;
 
       const boatInput = {
+        locationId: formData.locationId || null,
         name: formData.name,
         type: formData.type,
         location: formData.location,
@@ -240,11 +274,31 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
               </div>
               <div className="space-y-2">
                 <Label>{tl("Location", "Τοποθεσία")}</Label>
-                <Input
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g., Thassos Beach"
-                />
+                <Select
+                  value={formData.locationId || undefined}
+                  onValueChange={(value) => {
+                    const selected = locationOptions.find((item) => item.id === value);
+                    if (!selected) return;
+                    setFormData({
+                      ...formData,
+                      locationId: selected.id,
+                      location: selected.location,
+                      departureMarina: selected.name,
+                      mapQuery: selected.mapQuery || formatBoatLocationLabel(selected),
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={tl("Select location", "Επίλεξε τοποθεσία")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locationOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {formatBoatLocationLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>{tl("Rental units available", "Διαθέσιμες μονάδες ενοικίασης")}</Label>
@@ -263,15 +317,6 @@ export const WatersportsForm = ({ onClose, boat, onSubmit }: WatersportsFormProp
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Describe your equipment and experience..."
                 rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>{tl("Rental location/Launch point", "Τοποθεσία ενοικίασης/Σημείο εκκίνησης")}</Label>
-              <Input
-                value={formData.departureMarina}
-                onChange={(e) => setFormData({ ...formData, departureMarina: e.target.value })}
-                placeholder="Marina or beach name"
               />
             </div>
 

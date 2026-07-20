@@ -479,7 +479,7 @@ const mapRow = (
 		isSuperhost: ownerIsSuperhost,
 	},
 	availability: {
-		unavailableDates: [],
+		unavailableDates: Array.isArray(row.unavailable_dates) ? row.unavailable_dates : [],
 		minNoticeHours: Number(row.min_notice_hours ?? 24),
 	},
 	mapQuery: row.map_query ?? `${row.location}, Greece`,
@@ -503,7 +503,7 @@ const BOAT_SELECT_FALLBACK =
 const BOAT_SELECT_MINIMAL =
 	"id, name, type, location, capacity, rating, images, image, skipper_required, bookings, revenue, status, created_at";
 
-const isPublicBoatStatus = (status: unknown): boolean => {
+export const isPublicBoatStatus = (status: unknown): boolean => {
 	const normalized = String(status ?? "").trim().toLowerCase();
 	if (!normalized) return true;
 	return !["inactive", "maintenance", "archived", "draft"].includes(normalized);

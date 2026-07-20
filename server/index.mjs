@@ -60,6 +60,23 @@ const resendFromAddress =
     ? process.env.RESEND_FROM.trim()
     : "onboarding@resend.dev";
 
+// Resolves the public site origin used in outbound links/images (Stripe
+// redirect URLs, email assets). Prefers an explicit APP_BASE_URL, then falls
+// back to the platform-provided deployment URL (Vercel or Netlify), then a
+// placeholder so local dev without any of these still runs.
+const getAppBaseUrl = () => {
+  const explicit = String(process.env.APP_BASE_URL ?? "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  const vercelUrl = String(process.env.VERCEL_URL ?? "").trim();
+  if (vercelUrl) return `https://${vercelUrl}`;
+
+  const netlifyUrl = String(process.env.DEPLOY_PRIME_URL ?? "").trim();
+  if (netlifyUrl) return netlifyUrl.replace(/\/+$/, "");
+
+  return "https://your-deployed-site.vercel.app";
+};
+
 const getSupabaseConfigErrorMessage = () =>
   "Supabase admin is not configured. Set real SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY values in .env/.env.local (do not use placeholder values).";
 
@@ -254,8 +271,8 @@ const buildOwnerBookingEmailContent = ({
       <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #2D3748; margin: 0; padding: 0; background-color: #f9fafb;">
         <div style="max-width: 600px; margin: 20px auto; padding: 20px; border: 1px solid #E2E8F0; border-radius: 8px; background-color: #ffffff;">
           <div style="text-align: center; border-bottom: 2px solid #3182CE; padding-bottom: 20px;">
-            <img src="http://desk-jojos.tail9d3e44.ts.net:8080/nautiplex_logo.png" 
-                 alt="NAUTIPLEX" 
+            <img src="${getAppBaseUrl()}/nautiplex_logo.png"
+                 alt="NAUTIPLEX"
                  style="height: 60px; width: auto;" />
           </div>
 
@@ -499,6 +516,17 @@ const requireBookingOwnerAccess = async (req, res, next) => {
   return next();
 };
 
+// Every booking status write should go through this so each transition
+// (confirmed/cancelled/completed) leaves its own timestamp instead of only
+// the shared updated_at column being overwritten.
+const statusTransitionTimestamp = (status) => {
+  const now = new Date().toISOString();
+  if (status === "confirmed") return { confirmed_at: now };
+  if (status === "cancelled") return { cancelled_at: now };
+  if (status === "completed") return { completed_at: now };
+  return {};
+};
+
 const app = express();
 const port = Number(process.env.API_PORT ?? 4242);
 
@@ -622,6 +650,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
               package_hours: packageHours,
               total_price: metadataNumber("totalPrice", metadataNumber("amountDueNow", 0)),
               status: "confirmed",
+              ...statusTransitionTimestamp("confirmed"),
               boat_name: metadataString("boatName") || boat.name || "",
               owner_name: owner?.full_name || owner?.name || "Owner",
               customer_name: customerName,
@@ -662,6 +691,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
           .from("bookings")
           .update({
             status: "cancelled",
+            ...statusTransitionTimestamp("cancelled"),
             stripe_session_id: stripeSessionId,
             stripe_payment_intent_id: stripePaymentIntentId || null,
             updated_at: new Date().toISOString(),
@@ -682,6 +712,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
 
       let updatePayload = {
         status: "confirmed",
+        ...statusTransitionTimestamp("confirmed"),
         stripe_session_id: stripeSessionId,
         stripe_payment_intent_id: stripePaymentIntentId,
       };
@@ -944,6 +975,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
           .from("bookings")
           .update({
             status: "cancelled",
+            ...statusTransitionTimestamp("cancelled"),
             stripe_session_id: stripeSessionId,
             stripe_payment_intent_id: stripePaymentIntentId || null,
             updated_at: new Date().toISOString(),
@@ -1000,6 +1032,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
         .from("bookings")
         .update({
           status: "cancelled",
+          ...statusTransitionTimestamp("cancelled"),
           stripe_session_id: stripeSessionId,
           stripe_payment_intent_id: stripePaymentIntentId,
           updated_at: new Date().toISOString(),
@@ -1016,6 +1049,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
     if (paymentIntentId) {
       const updatePayload = {
         status: "confirmed",
+        ...statusTransitionTimestamp("confirmed"),
         stripe_payment_intent_id: paymentIntentId,
         updated_at: nowIso,
       };
@@ -1049,6 +1083,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async
         .from("bookings")
         .update({
           status: "cancelled",
+          ...statusTransitionTimestamp("cancelled"),
           stripe_payment_intent_id: paymentIntentId,
           updated_at: new Date().toISOString(),
         })
@@ -1604,7 +1639,7 @@ app.post("/api/owner/bookings/:bookingId/status", requireSupabaseUser, requireOw
 
     const { error: updateError } = await supabaseAdmin
       .from("bookings")
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ status, ...statusTransitionTimestamp(status), updated_at: new Date().toISOString() })
       .eq("id", bookingId);
 
     if (updateError) {
@@ -1943,7 +1978,7 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   const checkoutReference = `chk_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   try {
-    const appBaseUrl = process.env.APP_BASE_URL ?? process.env.DEPLOY_PRIME_URL ?? "https://your-deployed-netlify-site.netlify.app";
+    const appBaseUrl = getAppBaseUrl();
     const baseSessionPayload = {
       mode: "payment",
       // Stripe Checkout uses `card` to support card entry plus Apple Pay / Google Pay
@@ -2232,6 +2267,8 @@ app.post("/api/bookings/cancel", requireSupabaseUser, requireBookingOwnerAccess,
     .from("bookings")
     .update({
       status: "cancelled",
+      ...statusTransitionTimestamp("cancelled"),
+      cancellation_reason: reason?.trim() || null,
       notes: updatedNotes,
     })
     .eq("id", booking.id);
@@ -2492,6 +2529,7 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
       .from("bookings")
       .update({
         status: "cancelled",
+        ...statusTransitionTimestamp("cancelled"),
         stripe_session_id: sessionId,
         stripe_payment_intent_id: null,
         updated_at: new Date().toISOString(),
@@ -2505,6 +2543,7 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
       .from("bookings")
       .update({
         status: "confirmed",
+        ...statusTransitionTimestamp("confirmed"),
         stripe_session_id: sessionId,
         stripe_payment_intent_id: stripePaymentIntentId,
         updated_at: new Date().toISOString(),
@@ -2518,6 +2557,7 @@ app.get("/api/bookings/by-stripe-session", requireSupabaseUser, async (req, res)
       .from("bookings")
       .update({
         status: "cancelled",
+        ...statusTransitionTimestamp("cancelled"),
         stripe_session_id: sessionId,
         stripe_payment_intent_id: stripePaymentIntentId || booking.stripe_payment_intent_id || null,
         updated_at: new Date().toISOString(),
@@ -2658,6 +2698,50 @@ const handleSectorRequest = async (req, res, sector) => {
 app.get("/api/boats/rentals", async (req, res) => handleSectorRequest(req, res, "rentals"));
 app.get("/api/boats/party", async (req, res) => handleSectorRequest(req, res, "party"));
 app.get("/api/boats/watersports", async (req, res) => handleSectorRequest(req, res, "watersports"));
+
+// Public availability read: owners manage calendar_events (booked/blocked/maintenance)
+// under their own RLS-protected session, so the customer booking flow can't query that
+// table directly. This returns only the minimal, non-identifying fields needed to keep
+// the booking calendar in sync with owner-set blocks -- no description, booking_id, or
+// user_id, since those could leak another customer's identity.
+app.get("/api/boats/:boatId/blocked-slots", async (req, res) => {
+  if (!hasValidSupabaseAdminConfig) return res.status(500).json({ error: getSupabaseConfigErrorMessage() });
+
+  const boatId = String(req.params.boatId || "").trim();
+  if (!boatId) {
+    return res.status(400).json({ error: "Missing boatId in path" });
+  }
+
+  const from = String(req.query.from || "").trim();
+  const to = String(req.query.to || "").trim();
+
+  try {
+    let query = supabaseAdmin
+      .from("calendar_events")
+      .select("start_time, end_time, all_day, event_type")
+      .eq("boat_id", boatId)
+      .in("event_type", ["blocked", "maintenance"]);
+
+    if (from) query = query.gte("start_time", `${from}T00:00:00`);
+    if (to) query = query.lte("start_time", `${to}T23:59:59`);
+
+    const { data, error } = await query;
+    if (error) {
+      return res.status(500).json({ error: error.message || "Failed to load blocked slots" });
+    }
+
+    const blockedSlots = (data || []).map((row) => ({
+      startTime: row.start_time,
+      endTime: row.end_time,
+      allDay: Boolean(row.all_day),
+    }));
+
+    return res.json({ boatId, blockedSlots });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unexpected error loading blocked slots";
+    return res.status(500).json({ error: message });
+  }
+});
 
 // Migrate a single boat into sector tables (party/watersports) and clear legacy columns
 app.post("/api/boats/migrate/:boatId", requireSupabaseUser, requireOwnerRole, async (req, res) => {

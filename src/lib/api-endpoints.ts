@@ -60,6 +60,9 @@ export const resolveBookingLookupEndpoints = (apiBaseUrl = (import.meta.env.VITE
 export const resolveBoatsSectorEndpoints = (sector: string, apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim(), netlifyFunctionPath?: string) =>
   buildEndpointCandidates(`/api/boats/${sector}`, apiBaseUrl, netlifyFunctionPath);
 
+export const resolveBoatBlockedSlotsEndpoints = (boatId: string, apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
+  buildEndpointCandidates(`/api/boats/${boatId}/blocked-slots`, apiBaseUrl);
+
 export const resolveBoatImageSignEndpoints = (apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim()) =>
   buildEndpointCandidates("/api/storage/boat-images/sign", apiBaseUrl);
 
@@ -82,6 +85,23 @@ export const fetchBoatsSector = async <T>(sector: string, params?: Record<string
   const qs = buildQueryString(params);
   const endpointsWithQs = endpoints.map((e) => `${e}${qs}`);
   return fetchJsonFromEndpoints<T>(endpointsWithQs, { method: "GET" });
+};
+
+export interface BoatBlockedSlot {
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+}
+
+export const fetchBoatBlockedSlots = async (
+  boatId: string,
+  params?: { from?: string; to?: string },
+): Promise<BoatBlockedSlot[]> => {
+  const endpoints = resolveBoatBlockedSlotsEndpoints(boatId);
+  const qs = buildQueryString(params);
+  const endpointsWithQs = endpoints.map((e) => `${e}${qs}`);
+  const result = await fetchJsonFromEndpoints<{ blockedSlots: BoatBlockedSlot[] }>(endpointsWithQs, { method: "GET" });
+  return Array.isArray(result?.blockedSlots) ? result.blockedSlots : [];
 };
 
 export const fetchJsonFromEndpoints = async <T>(

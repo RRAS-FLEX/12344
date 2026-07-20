@@ -1,6 +1,7 @@
 ﻿import { supabase } from "@/lib/supabase";
 import { fetchJsonFromEndpoints, resolveDestinationImageSignEndpoints } from "@/lib/api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "@/lib/storage-public";
+import { isPublicBoatStatus } from "@/lib/boats";
 
 const placeholderDestinationImage = "/placeholder.svg";
 
@@ -222,10 +223,7 @@ export const getDestinations = async (): Promise<Destination[]> => {
 
     const activeBoatLocations = Array.isArray(boatRows)
       ? boatRows
-          .filter((row: { status?: string | null }) => {
-            const status = String(row?.status ?? "").trim().toLowerCase();
-            return !["inactive", "maintenance", "archived", "draft"].includes(status);
-          })
+          .filter((row: { status?: string | null }) => isPublicBoatStatus(row?.status))
           .map((row: { location?: string | null }) => normalizeLocation(String(row?.location ?? "")))
           .filter(Boolean)
       : [];

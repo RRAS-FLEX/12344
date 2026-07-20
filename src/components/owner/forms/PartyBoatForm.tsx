@@ -22,6 +22,7 @@ import {
   saveBoatPackages,
   OwnerBoat,
 } from "../../../lib/owner-dashboard";
+import { getBoatLocations, formatBoatLocationLabel, type BoatLocation } from "@/lib/boat-locations";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -80,8 +81,10 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
   const [currentStep, setCurrentStep] = useState(1);
   const activeBoatIdRef = useRef<string | null>(boat?.id ?? null);
   const [planType, setPlanType] = useState<"basic" | "custom">(boat?.partyTiers ? "custom" : "basic");
+  const [locationOptions, setLocationOptions] = useState<BoatLocation[]>([]);
 
   const [formData, setFormData] = useState({
+    locationId: boat?.locationId ?? "",
     name: boat?.name ?? "",
     type: boat?.type ?? "Party Boat",
     location: boat?.location ?? "Thassos",
@@ -142,6 +145,7 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
     setCurrentStep(1);
     setPlanType(boat.partyTiers && boat.partyTiers.length > 0 ? "custom" : "basic");
     setFormData({
+      locationId: boat?.locationId ?? "",
       name: boat?.name ?? "",
       type: boat?.type ?? "Party Boat",
       location: boat?.location ?? "Thassos",
@@ -182,6 +186,36 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
       discountType: "fixed",
     });
   }, [boat]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLocations = async () => {
+      const options = await getBoatLocations();
+      if (cancelled) return;
+      setLocationOptions(options);
+
+      if (!formData.locationId && options.length > 0) {
+        const first = options[0];
+        setFormData((current) => ({
+          ...current,
+          locationId: first.id,
+          location: first.location,
+          departureMarina: first.name,
+          mapQuery: first.mapQuery || formatBoatLocationLabel(first),
+        }));
+      }
+    };
+
+    void loadLocations();
+
+    return () => {
+      cancelled = true;
+    };
+    // Load location options once on mount; formData.locationId is only read here
+    // to avoid overwriting an existing selection, not to re-trigger the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,6 +356,7 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
         : [];
 
       const boatInput = {
+        locationId: formData.locationId || null,
         name: formData.name,
         type: formData.type,
         location: formData.location,
@@ -413,11 +448,31 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
               </div>
               <div className="space-y-2">
                 <Label>{tl("Location", "Τοποθεσία")}</Label>
-                <Input
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="e.g., Thassos"
-                />
+                <Select
+                  value={formData.locationId || undefined}
+                  onValueChange={(value) => {
+                    const selected = locationOptions.find((item) => item.id === value);
+                    if (!selected) return;
+                    setFormData({
+                      ...formData,
+                      locationId: selected.id,
+                      location: selected.location,
+                      departureMarina: selected.name,
+                      mapQuery: selected.mapQuery || formatBoatLocationLabel(selected),
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={tl("Select location", "Επίλεξε τοποθεσία")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locationOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {formatBoatLocationLabel(option)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>{tl("Max guests", "Μέγ. επισκέπτες")}</Label>
@@ -436,15 +491,6 @@ export const PartyBoatForm = ({ onClose, boat, onSubmit }: PartyBoatFormProps) =
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Describe your party boat experience..."
                 rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>{tl("Departure location/Marina", "Τοποθεσία αναχώρησης/Μαρίνα")}</Label>
-              <Input
-                value={formData.departureMarina}
-                onChange={(e) => setFormData({ ...formData, departureMarina: e.target.value })}
-                placeholder="Marina name"
               />
             </div>
 

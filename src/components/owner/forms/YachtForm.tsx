@@ -25,7 +25,6 @@ import {
 } from "../../../lib/owner-dashboard";
 import { getBoatLocations, formatBoatLocationLabel, type BoatLocation } from "@/lib/boat-locations";
 import { useToast } from "@/hooks/use-toast";
-import BoatLocationPicker from "./BoatLocationPicker";
 import { useLanguage } from "@/contexts/LanguageContext";
 
 interface YachtFormProps {
@@ -470,7 +469,10 @@ export const YachtForm = ({ onClose, boat, onSubmit }: YachtFormProps) => {
               </div>
               <div className="space-y-2">
                 <Label>{tl("Departure marina", "Μαρίνα αναχώρησης")}</Label>
-                <Input value={formData.departureMarina} onChange={(e) => setFormData({ ...formData, departureMarina: e.target.value })} placeholder="Marina name" />
+                <Input value={formData.departureMarina} readOnly disabled className="bg-muted" />
+                <p className="text-xs text-muted-foreground">
+                  {tl("Set by the location you picked in step 1.", "Ορίζεται από την τοποθεσία που επιλέξατε στο βήμα 1.")}
+                </p>
               </div>
               <div className="space-y-2">
                 <Label>{tl("Min. notice (hours)", "Ελάχ. προειδοποίηση (ώρες)")}</Label>
