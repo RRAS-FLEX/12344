@@ -264,39 +264,32 @@ export const signInWithEmail = async (
   return authUser;
 };
 
-/**
- * Get the currently signed-in user (from Supabase session)
- */
-export const getSessionUser = async (): Promise<AuthUser | null> => {
-  const usersTable = supabase.from("users");
-
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-
-  if (sessionError || !session?.user) {
-    return null;
-  }
-
+// Resolves the app-level profile for an already-known auth user. Deliberately
+// does not call supabase.auth.getSession()/getUser() — GoTrueClient invokes
+// onAuthStateChange callbacks while holding its internal session lock, and
+// calling another session-locking method from inside that callback (or from
+// anything it transitively calls) deadlocks forever. Callers that already
+// have a `session.user` (from getSession() or from the onAuthStateChange
+// callback's own argument) should go through this instead.
+const resolveUserProfile = async (user: User): Promise<AuthUser> => {
   if (isRememberedSessionExpired()) {
     await signOut();
-    return null;
+    return mapSessionToAuthUser(user);
   }
 
   ensureRememberedSessionIssuedAt();
 
-  const sessionFallback = mapSessionToAuthUser(session.user);
+  const sessionFallback = mapSessionToAuthUser(user);
 
-  // Fetch user profile
-  const { data: userData, error: userError } = await usersTable
+  const { data: userData, error: userError } = await supabase
+    .from("users")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userError || !userData) {
     try {
-      const profile = await ensureUserProfile(session.user);
+      const profile = await ensureUserProfile(user);
       const authUser = mapProfileToAuthUser(profile);
       writeCachedAuthUser(authUser);
       return authUser;
@@ -313,6 +306,42 @@ export const getSessionUser = async (): Promise<AuthUser | null> => {
   const authUser = mapProfileToAuthUser(userData);
   writeCachedAuthUser(authUser);
   return authUser;
+};
+
+const SESSION_CHECK_TIMEOUT_MS = 2500;
+const TIMED_OUT = Symbol("session-check-timed-out");
+
+// supabase-js's getSession() occasionally never resolves (observed hang tied to
+// its internal cross-tab session lock, most consistently right after a fresh
+// page load). Rather than let that strand the visitor on a permanent loading
+// screen, race it against a timeout and fall back to the last-known cached
+// user so the app stays usable even when the live check stalls.
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> =>
+  Promise.race([
+    promise,
+    new Promise<typeof TIMED_OUT>((resolve) => setTimeout(() => resolve(TIMED_OUT), ms)),
+  ]);
+
+/**
+ * Get the currently signed-in user (from Supabase session)
+ */
+export const getSessionUser = async (): Promise<AuthUser | null> => {
+  const result = await withTimeout(supabase.auth.getSession(), SESSION_CHECK_TIMEOUT_MS);
+
+  if (result === TIMED_OUT) {
+    return readCachedAuthUser();
+  }
+
+  const {
+    data: { session },
+    error: sessionError,
+  } = result;
+
+  if (sessionError || !session?.user) {
+    return null;
+  }
+
+  return resolveUserProfile(session.user);
 };
 
 /**
@@ -341,7 +370,9 @@ export const onAuthStateChange = (
         return;
       }
 
-      const user = await getSessionUser();
+      // Use the session already provided instead of calling getSessionUser()
+      // (which calls getSession()) — see resolveUserProfile's comment above.
+      const user = await resolveUserProfile(session.user);
       callback(user ?? mapSessionToAuthUser(session.user));
     }
   );

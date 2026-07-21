@@ -199,8 +199,12 @@ const Navbar = () => {
   };
 
   const handleAuthenticated = async (_user: AuthUser) => {
-    // Full reload so all auth-dependent state refreshes cleanly
-    window.location.href = "/portal";
+    // Client-side navigation: AuthContext already has the freshly-resolved
+    // user in memory at this point (via the onAuthStateChange listener), so
+    // a hard reload here would only force an unnecessary session restore
+    // from storage on the next page — and that restore path can occasionally
+    // stall (see getSessionUser's timeout fallback in supabase-auth.ts).
+    navigate("/portal");
   };
 
   const handleSignOut = async () => {
