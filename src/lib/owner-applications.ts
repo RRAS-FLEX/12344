@@ -1,4 +1,5 @@
 import { supabase, type DatabaseTables } from "@/lib/supabase";
+import { withRetry } from "@/lib/retry";
 
 export interface OwnerApplicationInput {
   // Personal
@@ -35,7 +36,7 @@ export interface OwnerApplicationRecord {
 const getSignedInSession = async () => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await withRetry(() => supabase.auth.getSession(), { retries: 1, initialDelayMs: 220 });
 
   if (!session?.user) {
     throw new Error("You must be signed in to apply as an owner");
