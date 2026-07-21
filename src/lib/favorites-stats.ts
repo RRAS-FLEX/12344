@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabasePublic } from "@/lib/supabase";
 
 export const getBoatFavoriteCountsMap = async (boatIds: string[]): Promise<Record<string, number>> => {
   const uniqueBoatIds = Array.from(new Set(boatIds.filter(Boolean)));
@@ -6,7 +6,7 @@ export const getBoatFavoriteCountsMap = async (boatIds: string[]): Promise<Recor
     return {};
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabasePublic
     .from("favorites")
     .select("boat_id")
     .in("boat_id", uniqueBoatIds);

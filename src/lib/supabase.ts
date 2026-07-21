@@ -1016,6 +1016,10 @@ const isServiceRoleKey = (token: string) => {
 };
 
 let supabase: SupabaseClient<Database> | null = null;
+// A second client, dedicated to public/anonymous reads (boat listings,
+// destinations, reviews) that never touches session persistence at all —
+// see the long comment further below, next to its assignment, for why.
+let supabasePublic: SupabaseClient<Database> | null = null;
 
 const migrateLegacyAuthTokenStorageKey = () => {
   if (typeof window === "undefined") {
@@ -1059,6 +1063,26 @@ if (supabaseUrl && supabaseAnonKey && isAllowedSupabaseUrl(supabaseUrl) && !isSe
       storage: authStorage,
     },
   });
+
+  // Public reads (boat listings/details, destinations, reviews) don't need
+  // an authenticated session — but routing them through the main `supabase`
+  // client means every one of those queries drags along that client's
+  // session-attachment machinery. That's the piece observed to occasionally
+  // stall indefinitely (session-lock contention right after a fresh page
+  // load while signed in — see getSessionSafe below, and withRetry in
+  // lib/retry.ts, both added as timeout-based mitigations for the same
+  // symptom before this was traced to its actual cause). This client has
+  // persistSession/autoRefreshToken disabled, so it never has a session to
+  // check or restore in the first place — nothing to contend over, so
+  // public data fetching stays fast and reliable regardless of whether the
+  // visitor happens to be signed in elsewhere in the app.
+  supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 } else {
   console.warn(
     "Supabase environment variables are missing or insecure. Database features will be disabled. " +
@@ -1100,9 +1124,15 @@ if (supabaseUrl && supabaseAnonKey && isAllowedSupabaseUrl(supabaseUrl) && !isSe
       }),
     },
   } as any;
+
+  // Same dummy shape is fine here too — this branch only exists when
+  // Supabase isn't configured at all, so every call site should already be
+  // handling a structured error response regardless of which client it came
+  // through.
+  supabasePublic = supabase;
 }
 
-export { supabase };
+export { supabase, supabasePublic };
 
 const GET_SESSION_TIMEOUT_MS = 4000;
 

@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabasePublic } from "./supabase";
 
 export interface OwnerBadge {
   id: string;
@@ -11,7 +11,7 @@ export interface OwnerBadge {
 export const getOwnerBadgesForBoat = async (boatId: string): Promise<OwnerBadge[]> => {
   if (!boatId) return [];
 
-  const { data, error } = await supabase
+  const { data, error } = await supabasePublic
     .from("boats")
     .select(
       `

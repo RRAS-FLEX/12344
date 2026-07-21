@@ -1,4 +1,4 @@
-import { supabase, getSessionSafe } from "./supabase";
+import { supabase, supabasePublic, getSessionSafe } from "./supabase";
 
 export interface BoatReview {
   id: string;
@@ -49,7 +49,7 @@ const mapReview = (review: ReviewRow): BoatReview => ({
 });
 
 export const getAllReviews = async (): Promise<BoatReview[]> => {
-  const { data, error } = await supabase.from("reviews").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabasePublic.from("reviews").select("*").order("created_at", { ascending: false });
   if (error) {
     throw new Error(error.message || "Failed to load reviews");
   }
@@ -57,7 +57,7 @@ export const getAllReviews = async (): Promise<BoatReview[]> => {
 };
 
 export const getBoatReviews = async (boatId: string): Promise<BoatReview[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await supabasePublic
     .from("reviews")
     .select("*")
     .eq("boat_id", boatId)
@@ -76,7 +76,7 @@ export const getBoatReviewStatsMap = async (boatIds: string[]) => {
     return {} as Record<string, { total: number; averageRating: number }>;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabasePublic
     .from("reviews")
     .select("boat_id, rating")
     .in("boat_id", uniqueBoatIds);

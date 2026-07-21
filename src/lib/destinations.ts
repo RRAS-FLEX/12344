@@ -1,4 +1,4 @@
-﻿import { supabase } from "@/lib/supabase";
+﻿import { supabasePublic } from "@/lib/supabase";
 import { fetchJsonFromEndpoints, resolveDestinationImageSignEndpoints } from "@/lib/api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "@/lib/storage-public";
 import { isPublicBoatStatus } from "@/lib/boats";
@@ -209,10 +209,10 @@ export const getDestinations = async (): Promise<Destination[]> => {
 
   const fetchOnce = async (): Promise<Destination[]> => {
     const [{ data, error }, { data: boatRows }] = await Promise.all([
-      supabase
+      supabasePublic
       .from("destinations")
       .select("id, slug, name, images, boats, description, best_for"),
-      supabase
+      supabasePublic
         .from("boats")
         .select("location, status"),
     ]);

@@ -1,4 +1,4 @@
-﻿import { supabase } from "./supabase";
+﻿import { supabase, supabasePublic } from "./supabase";
 import { fetchJsonFromEndpoints, resolveBoatImageSignEndpoints } from "./api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "./storage-public";
 
@@ -510,7 +510,7 @@ export const isPublicBoatStatus = (status: unknown): boolean => {
 };
 
 const queryBoats = (selectClause: string) =>
-	supabase.from("boats").select(selectClause);
+	supabasePublic.from("boats").select(selectClause);
 
 const loadSectorMaps = async (boatIds: string[]) => {
 	const partyByBoatId = new Map<string, PartyBoatRow>();
@@ -521,11 +521,11 @@ const loadSectorMaps = async (boatIds: string[]) => {
 	}
 
 	const [partyResult, watersportsResult] = await Promise.all([
-		supabase
+		supabasePublic
 			.from("party_boats")
 			.select("boat_id, ticket_max_people, ticket_price_per_person, party_tiers, party_event_date, party_event_time")
 			.in("boat_id", boatIds),
-		supabase
+		supabasePublic
 			.from("watersports_boats")
 			.select("boat_id")
 			.in("boat_id", boatIds),
@@ -549,7 +549,7 @@ const loadSectorMaps = async (boatIds: string[]) => {
 };
 
 const loadPartyBoats = async (boatIds?: string[]) => {
-	const partyBoatsTable = supabase.from("party_boats");
+	const partyBoatsTable = supabasePublic.from("party_boats");
 	const selectWithBoatId =
 		"boat_id, id, owner_id, name, location, description, departure_marina, capacity, ticket_max_people, ticket_price_per_person, party_tiers, party_event_date, party_event_time, images, status, map_query, flash_sale_enabled, owner:owner_id(id, name, created_at, owner_title, owner_bio, owner_languages, is_superhost, response_rate, stripe_payouts_ready)";
 	const selectIdOnly =
@@ -676,7 +676,7 @@ const loadPackagePriceMap = async (boatIds: string[]) => {
 		return priceByBoatId;
 	}
 
-	const { data, error } = await supabase
+	const { data, error } = await supabasePublic
 		.from("owner_package_boats")
 		.select("boat_id, owner_packages(price)")
 		.in("boat_id", boatIds);
@@ -804,7 +804,7 @@ const fetchBoatsFromSupabase = async (includeInactive = false) => {
 		return visible;
 	}
 
-	const minimalWithoutStatus = await supabase
+	const minimalWithoutStatus = await supabasePublic
 		.from("boats")
 		.select(BOAT_SELECT_MINIMAL);
 
@@ -893,7 +893,7 @@ export const getBoatById = async (id: string): Promise<Boat | null> => {
 		return null;
 	}
 
-	const { data, error } = await supabase
+	const { data, error } = await supabasePublic
 		.from("boats")
 		.select(BOAT_SELECT)
 		.eq("id", normalizedId)
@@ -906,7 +906,7 @@ export const getBoatById = async (id: string): Promise<Boat | null> => {
 		return mapRow(row, { party: sectorMaps.partyByBoatId.get(row.id), watersports: sectorMaps.watersportsByBoatId.get(row.id) }, { signedImageUrls });
 	}
 
-	const { data: fallbackData, error: fallbackError } = await supabase
+	const { data: fallbackData, error: fallbackError } = await supabasePublic
 		.from("boats")
 		.select(BOAT_SELECT_FALLBACK)
 		.eq("id", normalizedId)
@@ -919,7 +919,7 @@ export const getBoatById = async (id: string): Promise<Boat | null> => {
 		return mapRow(row, { party: sectorMaps.partyByBoatId.get(row.id), watersports: sectorMaps.watersportsByBoatId.get(row.id) }, { signedImageUrls });
 	}
 
-	const { data: minimalData, error: minimalError } = await supabase
+	const { data: minimalData, error: minimalError } = await supabasePublic
 		.from("boats")
 		.select(BOAT_SELECT_MINIMAL)
 		.eq("id", normalizedId)
