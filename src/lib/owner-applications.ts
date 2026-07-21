@@ -62,14 +62,18 @@ const mapApplication = (row: OwnerApplicationSelectedRow): OwnerApplicationRecor
 export const getMyOwnerApplication = async (): Promise<OwnerApplicationRecord | null> => {
   const session = await getSignedInSession();
 
-  const { data, error } = await supabase
-    .from("owner_applications")
-    .select("id, status, submitted_at, owner_name, owner_email, notes")
-    .eq("type", "owner_verification")
-    .eq("applicant_user_id", session.user.id)
-    .order("submitted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await withRetry(
+    () =>
+      supabase
+        .from("owner_applications")
+        .select("id, status, submitted_at, owner_name, owner_email, notes")
+        .eq("type", "owner_verification")
+        .eq("applicant_user_id", session.user.id)
+        .order("submitted_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    { retries: 1, initialDelayMs: 220 },
+  );
 
   if (error) {
     throw new Error(error.message || "Failed to load owner application");
