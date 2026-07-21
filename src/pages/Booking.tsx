@@ -23,6 +23,7 @@ import { signInWithGoogle } from "@/lib/auth-hybrid";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { withRetry } from "@/lib/retry";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -102,7 +103,7 @@ const Booking = () => {
 
       try {
         if (boatReference) {
-          const resolved = await getBoatByPublicReference(boatReference);
+          const resolved = await withRetry(() => getBoatByPublicReference(boatReference), { retries: 2, initialDelayMs: 220 });
           if (resolved) {
             if (!cancelled) {
               setBoat(resolved);
@@ -112,7 +113,7 @@ const Booking = () => {
           }
         }
 
-        const boats = await getBoats();
+        const boats = await withRetry(() => getBoats(), { retries: 2, initialDelayMs: 220 });
         const byName = boats.find((entry) => entry.name === boatNameFromQuery) ?? null;
         if (!cancelled) {
           setBoat(byName);
