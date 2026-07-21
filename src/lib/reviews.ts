@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getSessionSafe } from "./supabase";
 
 export interface BoatReview {
   id: string;
@@ -116,7 +116,7 @@ export const getBoatReviewStats = async (boatId: string) => {
 export const addBoatReview = async (input: ReviewDraftInput): Promise<BoatReview> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   const { data, error } = await supabase
     .from("reviews")

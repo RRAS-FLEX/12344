@@ -15,7 +15,7 @@ import CalendarManagement from "../components/owner/CalendarManagement";
 import PackageManagement from "../components/owner/PackageManagement";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface StripeConnectStatus {
@@ -103,7 +103,7 @@ const OwnerDashboard = () => {
         setIsStripeStatusLoading(true);
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await getSessionSafe();
 
         const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
         const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
@@ -146,7 +146,7 @@ const OwnerDashboard = () => {
 
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await getSessionSafe();
 
       const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
       const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";

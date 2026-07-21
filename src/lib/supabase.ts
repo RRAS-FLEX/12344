@@ -1104,6 +1104,30 @@ if (supabaseUrl && supabaseAnonKey && isAllowedSupabaseUrl(supabaseUrl) && !isSe
 
 export { supabase };
 
+const GET_SESSION_TIMEOUT_MS = 4000;
+
+/**
+ * Drop-in replacement for `supabase.auth.getSession()` that never hangs
+ * forever. supabase-js's client can occasionally stall indefinitely on this
+ * call (internal session-lock contention, most reliably reproduced right
+ * after a fresh page load while signed in — see withRetry in lib/retry.ts
+ * for the same issue on data queries). Returns the identical response shape,
+ * so existing call sites can swap the awaited function without other
+ * changes; on timeout it resolves as "no session" rather than rejecting, so
+ * callers that only check `session?.user` degrade the same way they already
+ * do for an anonymous visitor.
+ */
+export const getSessionSafe = (): ReturnType<typeof supabase.auth.getSession> =>
+  Promise.race([
+    supabase.auth.getSession(),
+    new Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>>((resolve) =>
+      setTimeout(
+        () => resolve({ data: { session: null }, error: null } as Awaited<ReturnType<typeof supabase.auth.getSession>>),
+        GET_SESSION_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+
 type DatabaseShape = Database;
 
 export type AppDatabase = DatabaseShape;

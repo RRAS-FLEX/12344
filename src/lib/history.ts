@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 
 export interface CustomerHistoryItem {
   id: string;
@@ -66,7 +66,7 @@ export interface CancelBookingResult {
 export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   if (!session?.user) {
     return [];
@@ -136,7 +136,7 @@ export const getCustomerBookingHistory = async (): Promise<CustomerHistoryItem[]
 export const getOwnerSalesHistory = async (): Promise<OwnerSalesHistoryItem[]> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   if (!session?.user) {
     return [];
@@ -233,7 +233,7 @@ export const cancelCustomerBooking = async (input: {
 }): Promise<CancelBookingResult> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   if (!session?.user) {
     throw new Error("You must be signed in to cancel a booking.");

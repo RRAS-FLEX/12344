@@ -1,4 +1,4 @@
-import { supabase, type DatabaseTables } from "./supabase";
+import { supabase, getSessionSafe, type DatabaseTables } from "./supabase";
 import { fetchJsonFromEndpoints, resolveBoatImageSignEndpoints } from "./api-endpoints";
 import { parseStorageReference, resolveStorageImage } from "./storage-public";
 import { uploadBoatImageToStorage } from "./boat-images";
@@ -139,7 +139,7 @@ const normalizeUnavailableDates = (raw: unknown): string[] => {
 const getSession = async () => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   if (!session?.user) {
     throw new Error("You must be signed in to access owner data");
@@ -1419,7 +1419,7 @@ export const getOwnerBookings = async (): Promise<OwnerBooking[]> => {
 export const updateOwnerBookingStatus = async (bookingId: string, status: string): Promise<void> => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
   const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";

@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, getSessionSafe } from "./supabase";
 import { resolveBoatVoucherPricing } from "./booking-pricing";
 import { fetchBoatBlockedSlots } from "./api-endpoints";
 
@@ -572,7 +572,7 @@ export const confirmBookingWorkflow = async (input: ConfirmBookingInput): Promis
   const timestamp = new Date().toISOString();
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   const pricing = resolveBoatVoucherPricing({
     baseTotalPrice: input.totalPrice,

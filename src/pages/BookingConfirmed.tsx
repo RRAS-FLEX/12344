@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookingConfirmationSkeleton } from "@/components/loading/LoadingUI";
 import { fetchJsonFromEndpoints, resolveBookingLookupEndpoints } from "@/lib/api-endpoints";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 
 type ResolvedBooking = {
   bookingId: string;
@@ -75,7 +75,7 @@ const BookingConfirmed = () => {
       try {
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await getSessionSafe();
 
         if (!session?.access_token) {
           if (!cancelled) {

@@ -1,5 +1,5 @@
 ﻿import type { User } from "@supabase/supabase-js";
-import { supabase, type DatabaseTables } from "./supabase";
+import { supabase, getSessionSafe, type DatabaseTables } from "./supabase";
 
 export type MessageSender = "customer" | "owner";
 
@@ -52,7 +52,7 @@ const toReadableChatError = (error: unknown, fallback: string) => {
 const getSignedInSession = async () => {
   const {
     data: { session },
-  } = await supabase.auth.getSession();
+  } = await getSessionSafe();
 
   if (!session?.user) {
     throw new Error("Sign in to chat with owners.");

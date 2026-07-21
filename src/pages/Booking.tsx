@@ -20,7 +20,7 @@ import { buildBoatDetailsPath, buildBoatPublicSlug, getBoatByPublicReference, ge
 import type { Boat } from "@/lib/boats";
 import { trackBookingConfirmed, trackBookingStarted } from "@/lib/analytics";
 import { signInWithGoogle } from "@/lib/auth-hybrid";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { withRetry } from "@/lib/retry";
@@ -890,7 +890,7 @@ const Booking = () => {
       try {
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await getSessionSafe();
 
         const checkoutAbortController = new AbortController();
         let checkoutTimeoutId: number | null = window.setTimeout(() => {

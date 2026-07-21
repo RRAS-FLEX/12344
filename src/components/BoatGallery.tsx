@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { BoatsGridSkeleton } from "@/components/loading/LoadingUI";
 import { fetchJsonFromEndpoints, resolveStripeCheckoutEndpoints } from "@/lib/api-endpoints";
 import { getBoats } from "@/lib/boats";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 
 type BoatRecord = {
   id: string;
@@ -29,7 +29,7 @@ function BoatCard({ boat }: BoatCardProps) {
     try {
       const {
         data: { session },
-      } = await supabase.auth.getSession();
+      } = await getSessionSafe();
 
       const payload = await fetchJsonFromEndpoints<{ sessionId?: string; checkoutUrl?: string; error?: string }>(resolveStripeCheckoutEndpoints(), {
         method: "POST",

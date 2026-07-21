@@ -23,7 +23,7 @@ import { getOwnerBoats, getOwnerStats, OwnerBoat } from "../lib/dashboard-hybrid
 import { useCurrentUser } from "../hooks/useCurrentUser";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { withRetry } from "@/lib/retry";
-import { supabase } from "@/lib/supabase";
+import { supabase, getSessionSafe } from "@/lib/supabase";
 import { OwnerFleetPageSkeleton } from "@/components/loading/LoadingUI";
 import { useToast } from "@/hooks/use-toast";
 import { getUserAvatarUrl, uploadUserAvatar } from "@/lib/profile-avatar";
@@ -144,7 +144,7 @@ const OwnerProfile = () => {
         setIsStripeStatusLoading(true);
         const {
           data: { session },
-        } = await supabase.auth.getSession();
+        } = await getSessionSafe();
 
         const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL?.trim?.() ?? "";
         const base = apiBaseUrl ? apiBaseUrl.replace(/\/$/, "") : "";
